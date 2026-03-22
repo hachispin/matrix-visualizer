@@ -1,2 +1,3 @@
-# epq-rust-tbd
-Nothing here yet! Come back later...
+# matrix-visualizer
+
+Nothing here yet! Come back later.
