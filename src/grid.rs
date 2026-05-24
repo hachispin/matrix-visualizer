@@ -22,7 +22,7 @@ use three_d::{
 ///
 /// This can represent a point, line and polygon.
 #[derive(Debug)]
-struct GridShape {
+pub struct GridShape {
     /// Points to render when no transformation is applied.
     ///
     /// If there is more than one point, then the points
@@ -105,7 +105,7 @@ impl Default for PlottingGrid {
 }
 
 impl PlottingGrid {
-    fn new(centre: Vec3, magnification: f32, shapes: Vec<GridShape>) -> Self {
+    pub fn new(centre: Vec3, magnification: f32, shapes: Vec<GridShape>) -> Self {
         Self {
             centre,
             magnification,
@@ -114,49 +114,42 @@ impl PlottingGrid {
         }
     }
 
-    fn shapes(&self) -> &[GridShape] { &self.shapes }
+    pub fn shapes(&self) -> &[GridShape] { &self.shapes }
 
     /// Convenience method for adding a shape.
     ///
     /// Equivalent to pushing to [`Self::mut_shapes`].
-    fn push_shape(&mut self, shape: GridShape) {
+    pub fn push_shape(&mut self, shape: GridShape) {
         self.shapes.push(shape);
         self.redraw_mesh = true;
     }
 
     /// Returns a mutable references to the stored grid shapes.
-    fn mut_shapes(&mut self) -> &mut [GridShape] {
+    pub fn mut_shapes(&mut self) -> &mut [GridShape] {
         self.redraw_mesh = true;
         &mut self.shapes
     }
 
-    /// Recomputes the stored mesh if it needs changes.
-    ///
-    /// One example for when the mesh would be redrawn is if
-    /// a new shape is added (through [`Self::add_shape`]).
-    ///
-    /// This resets the `redraw_mesh` flag to false afterwards.
-    fn redraw_if_needed(&mut self) {
+    /// Returns the mesh, redrawing if needed.
+    pub fn mesh(&mut self) -> &CpuMesh {
         if self.redraw_mesh {
-            /* ... */
+            /* actually redraw the mesh */
             self.redraw_mesh = false;
         }
 
         todo!()
     }
 
-    /// Returns the mesh.
-    ///
-    /// NOTE: Make sure to call [`Self::redraw_if_needed`] if the mesh has been modified.
-    const fn mesh(&self) -> &CpuMesh { &self.mesh }
+    /// Returns the mesh without redrawing.
+    pub const fn const_mesh(&self) -> &CpuMesh { &self.mesh }
 
-    fn zoom_in(&mut self) {
+    pub fn zoom_in(&mut self) {
         self.magnification *= 2.0;
         self.redraw_mesh = true;
         todo!()
     }
 
-    fn zoom_out(&mut self) {
+    pub fn zoom_out(&mut self) {
         self.magnification /= 2.0;
         self.redraw_mesh = true;
         todo!()
