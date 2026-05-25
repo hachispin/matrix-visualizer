@@ -3,6 +3,7 @@
 
 use std::ops::Range;
 
+use anyhow::{Result, bail};
 use three_d::{
     ColorMaterial,
     Context,
@@ -43,16 +44,26 @@ pub struct GridShape {
 }
 
 impl GridShape {
-    pub const fn polygon(points: Vec<Vec3>, color: Srgba) -> Self {
-        Self {
+    /// Constructor for a polygon.
+    ///
+    /// # Errors
+    ///
+    /// If less than three points are defined.
+    pub fn polygon(points: Vec<Vec3>, color: Srgba) -> Result<Self> {
+        if points.len() < 3 {
+            bail!("Can't form a polygon with less than three points.");
+        }
+
+        Ok(Self {
             original: points,
             transformed: Vec::new(),
             transformations: Vec::new(),
             color,
             closed: true,
-        }
+        })
     }
 
+    /// Constructor for a line.
     pub fn line(p1: Vec3, p2: Vec3, color: Srgba) -> Self {
         Self {
             original: vec![p1, p2],
@@ -63,6 +74,7 @@ impl GridShape {
         }
     }
 
+    /// Constructor for a point.
     pub fn point(point: Vec3, color: Srgba) -> Self {
         Self {
             original: vec![point],
