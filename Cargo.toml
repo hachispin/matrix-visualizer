@@ -13,7 +13,7 @@ three-d = { version = "0.19.0", features = ["egui-gui"] }
 # non_send_fields_in_send_ty = "warn"
 # transmute_undefined_repr = "warn"
 # undocumented_unsafe_blocks = "warn"
-# uninhabited_reference = "warn"
+# uninhabited_references = "warn"
 
 [lints.clippy]
 absolute_paths = "warn"
