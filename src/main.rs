@@ -2,24 +2,18 @@ use three_d::{
     Camera,
     ClearState,
     ColorMaterial,
-    CpuMesh,
     FrameOutput,
-    Geometry,
     Gm,
-    Indices,
     Mesh,
-    Positions,
-    Quat,
-    Rotation3,
     Window,
     WindowSettings,
     degrees,
-    radians,
     vec3,
 };
 
-/// Width of grid lines in units.
-const LINE_WIDTH: f32 = 1.0;
+use crate::grid::PlottingGrid;
+
+mod grid;
 
 /// Rotates a rectangle.
 ///
@@ -35,6 +29,7 @@ pub fn main() {
     .unwrap();
 
     let ctx = window.gl();
+    let mut grid = PlottingGrid::default();
 
     // A "perspective" camera (as opposed to an orthographic one) is
     // often preferred as it's more natural to the eye. Though, for a
@@ -49,37 +44,14 @@ pub fn main() {
         10.0,
     );
 
-    let positions = Positions::F32(vec![
-        vec3(-5.0, -LINE_WIDTH / 2.0, 0.0),
-        vec3(-5.0, LINE_WIDTH / 2.0, 0.0),
-        vec3(5.0, -LINE_WIDTH / 2.0, 0.0),
-        vec3(5.0, LINE_WIDTH / 2.0, 0.0),
-    ]);
-
-    let indices = Indices::U8(vec![0, 1, 2, 1, 2, 3]);
-
-    let cpu_mesh = CpuMesh {
-        positions,
-        indices,
-        ..Default::default()
-    };
-
-    let mut model = Gm::new(Mesh::new(&ctx, &cpu_mesh), ColorMaterial::default());
-    model.set_animation(|time| Quat::from_angle_y(radians(time * 0.0005)).into());
-
     window.render_loop(move |frame_input| {
         camera.set_viewport(frame_input.viewport);
-
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "f32 works for anything under ~1e28 years"
-        )]
-        model.animate(frame_input.accumulated_time as f32);
+        let gm = Gm::new(Mesh::new(&ctx, grid.mesh()), ColorMaterial::default());
 
         frame_input
             .screen()
             .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
-            .render(&camera, &model, &[]);
+            .render(&camera, &gm, &[]);
 
         FrameOutput::default()
     });

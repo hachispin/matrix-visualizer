@@ -1,8 +1,6 @@
 //! Module responsible for handling and rendering the grid.
 #![allow(unused, reason = "WIP")]
 
-use std::ops::Range;
-
 use anyhow::{Result, bail};
 use three_d::{
     ColorMaterial,
@@ -53,7 +51,6 @@ impl GridShape {
         if points.len() < 3 {
             bail!("Can't form a polygon with less than three points.");
         }
-
         Ok(Self {
             original: points,
             transformed: Vec::new(),
@@ -88,6 +85,8 @@ impl GridShape {
 
 /// Represents a 3D grid.
 ///
+/// The camera shouldn't be able to see outside the grid.
+///
 /// Generally should be declared as mutable.
 pub struct PlottingGrid {
     /// Initially (0, 0, 0).
@@ -111,7 +110,7 @@ impl Default for PlottingGrid {
             magnification: 1.0,
             shapes: Vec::new(),
             mesh: CpuMesh::default(),
-            redraw_mesh: false,
+            redraw_mesh: true,
         }
     }
 }
@@ -144,12 +143,35 @@ impl PlottingGrid {
 
     /// Returns the mesh, redrawing if needed.
     pub fn mesh(&mut self) -> &CpuMesh {
-        if self.redraw_mesh {
-            /* actually redraw the mesh */
-            self.redraw_mesh = false;
+        const GRID_SIZE: f32 = 10.0;
+        const LINE_WIDTH: f32 = 1.0;
+        /// For reserving capacity. 10.0 ** 2.
+        const NUM_LINES: usize = 100;
+
+        if !self.redraw_mesh {
+            return self.const_mesh();
         }
 
-        todo!()
+        // NOTE: This is temporary and doesn't draw a proper grid.
+        let mut vertices = Vec::with_capacity(NUM_LINES);
+
+        // A triangle.
+        vertices.push(vec3(0.0, 0.0, 1.0));
+        vertices.push(vec3(1.0, 0.0, 1.0));
+        vertices.push(vec3(1.0, 1.0, 1.0));
+
+        let positions = Positions::F32(vertices);
+
+        let mesh = CpuMesh {
+            positions,
+            colors: Some(vec![Srgba::RED; 3]),
+            ..Default::default()
+        };
+
+        self.mesh = mesh;
+        self.redraw_mesh = false;
+
+        &self.mesh
     }
 
     /// Returns the mesh without redrawing.
