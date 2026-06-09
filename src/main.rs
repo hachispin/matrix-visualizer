@@ -4,7 +4,6 @@ use three_d::{
     ColorMaterial,
     FrameOutput,
     Gm,
-    Mesh,
     Window,
     WindowSettings,
     degrees,
@@ -46,7 +45,7 @@ pub fn main() {
 
     window.render_loop(move |frame_input| {
         camera.set_viewport(frame_input.viewport);
-        let gm = Gm::new(Mesh::new(&ctx, grid.mesh()), ColorMaterial::default());
+        let gm = Gm::new(grid.mesh(&ctx).unwrap(), ColorMaterial::default());
 
         frame_input
             .screen()

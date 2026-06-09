@@ -7,6 +7,7 @@ use three_d::{
     Context,
     CpuMesh,
     Gm,
+    Indices,
     Mat3,
     Mesh,
     Positions,
@@ -98,7 +99,9 @@ pub struct PlottingGrid {
     /// Shapes to render.
     shapes: Vec<GridShape>,
     /// The mesh. Will be updated when needed.
-    mesh: CpuMesh,
+    ///
+    /// Initially, this is set to `None`.
+    mesh: Option<Mesh>,
     /// Flag set for whenever the mesh needs to be redrawn.
     redraw_mesh: bool,
 }
@@ -109,7 +112,7 @@ impl Default for PlottingGrid {
             centre: Vec3::zero(),
             magnification: 1.0,
             shapes: Vec::new(),
-            mesh: CpuMesh::default(),
+            mesh: None,
             redraw_mesh: true,
         }
     }
@@ -142,9 +145,19 @@ impl PlottingGrid {
     }
 
     /// Returns the mesh, redrawing if needed.
-    pub fn mesh(&mut self) -> &CpuMesh {
-        const GRID_SIZE: f32 = 10.0;
-        const LINE_WIDTH: f32 = 1.0;
+    ///
+    /// This needs a context for the mesh to attach to.
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::arithmetic_side_effects,
+        reason = "Will fix later"
+    )]
+    pub fn mesh(&mut self, ctx: &Context) -> Option<&Mesh> {
+        /// The grid extends out `GRID_SIZE` units from its origin in all six directions.
+        const GRID_SIZE: i32 = 5;
+        /// Width of quads that form the grid.
+        const LINE_WIDTH: f32 = 0.05;
         /// For reserving capacity. 10.0 ** 2.
         const NUM_LINES: usize = 100;
 
@@ -152,30 +165,56 @@ impl PlottingGrid {
             return self.const_mesh();
         }
 
-        // NOTE: This is temporary and doesn't draw a proper grid.
-        let mut vertices = Vec::with_capacity(NUM_LINES);
+        // Draws a basic grid.
+        //
+        // NOTE: Not updated by zoom functions yet!
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
 
-        // A triangle.
-        vertices.push(vec3(0.0, 0.0, 1.0));
-        vertices.push(vec3(1.0, 0.0, 1.0));
-        vertices.push(vec3(1.0, 1.0, 1.0));
+        for i in -GRID_SIZE..=GRID_SIZE {
+            let y = i as f32;
 
-        let positions = Positions::F32(vertices);
+            let base = positions.len() as u32;
+            positions.push(vec3(-GRID_SIZE as f32, y - LINE_WIDTH, 0.0));
+            positions.push(vec3(GRID_SIZE as f32, y - LINE_WIDTH, 0.0));
+            positions.push(vec3(GRID_SIZE as f32, y + LINE_WIDTH, 0.0));
+            positions.push(vec3(-GRID_SIZE as f32, y + LINE_WIDTH, 0.0));
 
-        let mesh = CpuMesh {
-            positions,
-            colors: Some(vec![Srgba::RED; 3]),
+            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        }
+
+        for i in -GRID_SIZE..=GRID_SIZE {
+            let x = i as f32;
+
+            let base = positions.len() as u32;
+
+            positions.push(vec3(x - LINE_WIDTH, -GRID_SIZE as f32, 0.0));
+            positions.push(vec3(x + LINE_WIDTH, -GRID_SIZE as f32, 0.0));
+            positions.push(vec3(x + LINE_WIDTH, GRID_SIZE as f32, 0.0));
+            positions.push(vec3(x - LINE_WIDTH, GRID_SIZE as f32, 0.0));
+
+            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        }
+
+        let positions_len = positions.len();
+
+        let cpu_mesh = CpuMesh {
+            positions: Positions::F32(positions),
+            indices: Indices::U32(indices),
+            colors: Some(vec![Srgba::RED; positions_len]),
             ..Default::default()
         };
 
-        self.mesh = mesh;
+        self.mesh = Some(Mesh::new(ctx, &cpu_mesh));
         self.redraw_mesh = false;
 
-        &self.mesh
+        self.mesh.as_ref()
     }
 
     /// Returns the mesh without redrawing.
-    pub const fn const_mesh(&self) -> &CpuMesh { &self.mesh }
+    ///
+    /// In other words, a simple getter for the mesh field.
+    pub const fn const_mesh(&self) -> Option<&Mesh> { self.mesh.as_ref() }
 
     pub fn zoom_in(&mut self) {
         self.magnification *= 2.0;
