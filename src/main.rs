@@ -13,6 +13,7 @@ use three_d::{
 use crate::grid::PlottingGrid;
 
 mod grid;
+pub mod palette;
 
 /// Rotates a rectangle.
 ///
