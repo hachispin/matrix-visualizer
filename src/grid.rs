@@ -19,68 +19,48 @@ use three_d::{
 };
 
 /// A shape rendered on the grid.
-///
-/// This can represent a point, line and polygon.
 #[derive(Debug)]
 pub struct GridShape {
-    /// Points to render when no transformation is applied.
+    /// Shape to render when no transformation is applied.
+    original: ShapeType,
+    /// Computed based off `transformations` on `original`.
     ///
-    /// If there is more than one point, then the points
-    /// are connected in the order that they're declared.
-    original: Vec<Vec3>,
-    /// Computed based off `transformations` on `original_points`.
-    ///
-    /// Must be the same length as `original_points`.
-    transformed: Vec<Vec3>,
-    /// Transformations to apply on `original_points`.
+    /// Must have the same number of points as `original`.
+    transformed: ShapeType,
+    /// Transformations to apply on `original`.
     transformations: Vec<Mat3>,
-    /// The color of the point and the connecting lines, if present.
+    /// The color of the shape.
     color: Srgba,
-    /// Whether the last point should connect with the first.
-    ///
-    /// Has no impact if only two or less points are defined.
-    closed: bool,
+}
+
+/// Enum representing possible shapes.
+#[derive(Debug, Clone)]
+pub enum ShapeType {
+    Point(Vector3<f32>),
+    Line(Vector3<f32>, Vector3<f32>),
+    /// Connected in order of points. Last point connects to first.
+    Polygon(Vec<Vector3<f32>>),
 }
 
 impl GridShape {
-    /// Constructor for a polygon.
+    /// Constructor.
     ///
     /// # Errors
     ///
-    /// If less than three points are defined.
-    pub fn polygon(points: Vec<Vec3>, color: Srgba) -> Result<Self> {
-        if points.len() < 3 {
-            bail!("Can't form a polygon with less than three points.");
+    /// If the `shape` is a `Polygon` variant but has less than three points.
+    pub fn new(shape: ShapeType, color: Srgba) -> Result<Self> {
+        if let ShapeType::Polygon(points) = &shape
+            && points.len() < 3
+        {
+            bail!("A polygon needs at least three points");
         }
+
         Ok(Self {
-            original: points,
-            transformed: Vec::new(),
+            original: shape.clone(),
+            transformed: shape, // no transformations applied yet
             transformations: Vec::new(),
             color,
-            closed: true,
         })
-    }
-
-    /// Constructor for a line.
-    pub fn line(p1: Vec3, p2: Vec3, color: Srgba) -> Self {
-        Self {
-            original: vec![p1, p2],
-            transformed: Vec::new(),
-            transformations: Vec::new(),
-            color,
-            closed: false,
-        }
-    }
-
-    /// Constructor for a point.
-    pub fn point(point: Vec3, color: Srgba) -> Self {
-        Self {
-            original: vec![point],
-            transformed: Vec::new(),
-            transformations: Vec::new(),
-            color,
-            closed: false,
-        }
     }
 }
 
