@@ -18,6 +18,8 @@ use three_d::{
     vec3,
 };
 
+use crate::palette;
+
 /// A shape rendered on the grid.
 #[derive(Debug)]
 pub struct GridShape {
@@ -124,64 +126,143 @@ impl PlottingGrid {
         &mut self.shapes
     }
 
+    /// Helper for mesh. Should probably be put somewhere else.
+    fn draw_2d_line(
+        positions: &mut Vec<Vector3<f32>>,
+        indices: &mut Vec<u32>,
+        p1: Vector3<f32>,
+        p2: Vector3<f32>,
+        line_width: f32,
+    ) {
+        // add width perpendicular to the line
+
+        let dx = p2.x - p1.x;
+        let dy = p2.y - p1.y;
+        let length = dx.hypot(dy);
+
+        if length == 0.0 {
+            return;
+        }
+
+        let offset = vec3(-dy, dx, 0.0) * (line_width / (2.0 * length));
+        let base = u32::try_from(positions.len()).unwrap();
+
+        positions.push(p1 - offset);
+        positions.push(p1 + offset);
+        positions.push(p2 - offset);
+        positions.push(p2 + offset);
+
+        // winding order: doesn't really matter here since backface culling is usually
+        // disabled but this order ensures both triangle of the quad are facing the same way.
+        indices.extend([base, base + 2, base + 1, base + 1, base + 2, base + 3]);
+    }
+
     /// Returns the mesh, redrawing if needed.
     ///
     /// This needs a context for the mesh to attach to.
-    #[expect(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::arithmetic_side_effects,
-        reason = "Will fix later"
-    )]
     pub fn mesh(&mut self, ctx: &Context) -> Option<&Mesh> {
-        /// The grid extends out `GRID_SIZE` units from its origin in all six directions.
+        /// The cubic grid extends out `GRID_SIZE` world
+        /// units from its origin in all six directions.
         const GRID_SIZE: i32 = 5;
         /// Width of quads that form the grid.
         const LINE_WIDTH: f32 = 0.05;
-        /// For reserving capacity. 10.0 ** 2.
-        const NUM_LINES: usize = 100;
+
+        const GRID_SIZE_F32: f32 = 5.0;
 
         if !self.redraw_mesh {
             return self.const_mesh();
         }
 
-        // Draws a basic grid.
+        // draw x-y grid
         //
-        // NOTE: Not updated by zoom functions yet!
+        // axis lines should be drawn starting at x=0 or y=0 so the origin stays the origin
+        // (since it's not guaranteed to fit an integer amount of gridlines at some zoom).
+        //
+        // also not planning on x/y axis stretching as a feature for now.
+
         let mut positions = Vec::new();
         let mut indices = Vec::new();
 
-        for i in -GRID_SIZE..=GRID_SIZE {
-            let y = i as f32;
+        // +x, +y
+        for c in (0..=GRID_SIZE).step_by(1) {
+            let c = c as f32;
 
-            let base = positions.len() as u32;
-            positions.push(vec3(-GRID_SIZE as f32, y - LINE_WIDTH, 0.0));
-            positions.push(vec3(GRID_SIZE as f32, y - LINE_WIDTH, 0.0));
-            positions.push(vec3(GRID_SIZE as f32, y + LINE_WIDTH, 0.0));
-            positions.push(vec3(-GRID_SIZE as f32, y + LINE_WIDTH, 0.0));
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(0.0, c, 0.0),
+                vec3(GRID_SIZE_F32, c, 0.0),
+                LINE_WIDTH,
+            );
 
-            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(c, 0.0, 0.0),
+                vec3(c, GRID_SIZE_F32, 0.0),
+                LINE_WIDTH,
+            );
+
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(0.0, c, 0.0),
+                vec3(-GRID_SIZE_F32, c, 0.0),
+                LINE_WIDTH,
+            );
+
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(c, 0.0, 0.0),
+                vec3(c, -GRID_SIZE_F32, 0.0),
+                LINE_WIDTH,
+            );
         }
 
-        for i in -GRID_SIZE..=GRID_SIZE {
-            let x = i as f32;
+        // -x, -y
+        for c in (-GRID_SIZE..=0).rev() {
+            let c = c as f32;
 
-            let base = positions.len() as u32;
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(0.0, c, 0.0),
+                vec3(GRID_SIZE_F32, c, 0.0),
+                LINE_WIDTH,
+            );
 
-            positions.push(vec3(x - LINE_WIDTH, -GRID_SIZE as f32, 0.0));
-            positions.push(vec3(x + LINE_WIDTH, -GRID_SIZE as f32, 0.0));
-            positions.push(vec3(x + LINE_WIDTH, GRID_SIZE as f32, 0.0));
-            positions.push(vec3(x - LINE_WIDTH, GRID_SIZE as f32, 0.0));
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(c, 0.0, 0.0),
+                vec3(c, GRID_SIZE_F32, 0.0),
+                LINE_WIDTH,
+            );
 
-            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(0.0, c, 0.0),
+                vec3(-GRID_SIZE_F32, c, 0.0),
+                LINE_WIDTH,
+            );
+
+            Self::draw_2d_line(
+                &mut positions,
+                &mut indices,
+                vec3(c, 0.0, 0.0),
+                vec3(c, -GRID_SIZE_F32, 0.0),
+                LINE_WIDTH,
+            );
         }
 
-        let positions_len = positions.len();
+        let num_positions = positions.len();
 
         let cpu_mesh = CpuMesh {
             positions: Positions::F32(positions),
             indices: Indices::U32(indices),
-            colors: Some(vec![Srgba::RED; positions_len]),
+            colors: Some(vec![palette::MINOR_GRID; num_positions]),
             ..Default::default()
         };
 
