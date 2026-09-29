@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic)]
+
 use three_d::{
     Camera,
     ClearState,
