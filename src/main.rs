@@ -1,4 +1,5 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::cast_precision_loss)]
 
 use three_d::{
     Camera,
@@ -50,9 +51,18 @@ pub fn main() {
         camera.set_viewport(frame_input.viewport);
         let gm = Gm::new(grid.mesh(&ctx).unwrap(), ColorMaterial::default());
 
+        let bg = palette::BACKGROUND;
+
+        // turn to normalized
+        let (r, g, b) = (
+            f32::from(bg.r) / 255.0,
+            f32::from(bg.g) / 255.0,
+            f32::from(bg.b) / 255.0,
+        );
+
         frame_input
             .screen()
-            .clear(ClearState::color_and_depth(0.8, 0.8, 0.8, 1.0, 1.0))
+            .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
             .render(&camera, &gm, &[]);
 
         FrameOutput::default()
