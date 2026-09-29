@@ -5,10 +5,14 @@ use three_d::{
     Camera,
     ClearState,
     ColorMaterial,
+    Event,
     FrameOutput,
     Gm,
+    MouseButton,
+    Vec3,
     Window,
     WindowSettings,
+    Zero,
     degrees,
     vec3,
 };
@@ -39,16 +43,44 @@ pub fn main() {
     // graphing tool, orthographic may be desired for its consistency.
     let mut camera = Camera::new_perspective(
         window.viewport(),
-        vec3(0.0, 0.0, 5.0),
-        vec3(0.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
+        vec3(9.0, -12.0, 9.0),
+        Vec3::zero(),
+        Vec3::unit_z(),
         degrees(45.0),
         0.1,
-        10.0,
+        100.0,
     );
 
-    window.render_loop(move |frame_input| {
+    window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
+
+        // rotate the camera around the graph on drag
+        for event in &mut frame_input.events {
+            const DRAG_MULTIPLIER: f32 = 0.005;
+
+            // pattern match this event
+            if let Event::MouseMotion {
+                button: Some(MouseButton::Left),
+                delta,
+                handled,
+                ..
+            } = event
+            {
+                if *handled {
+                    continue;
+                }
+
+                camera.rotate_around_with_fixed_up(
+                    Vec3::zero(),
+                    DRAG_MULTIPLIER * delta.0,
+                    DRAG_MULTIPLIER * delta.1,
+                );
+
+                // prevent other event handlers from using this event again
+                *handled = true;
+            }
+        }
+
         let gm = Gm::new(grid.mesh(&ctx).unwrap(), ColorMaterial::default());
 
         let bg = palette::BACKGROUND;
