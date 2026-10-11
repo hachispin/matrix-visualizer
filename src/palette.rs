@@ -16,7 +16,6 @@ pub const MAJOR_GRID: Srgba = Srgba::new_opaque(0x93, 0xA7, 0xBA);
 #[expect(unused)]
 pub const CUBE_OUTLINE: Srgba = Srgba::new_opaque(0x9A, 0xA8, 0xB8);
 /// Axes and arrowheads (#475569).
-#[expect(unused)]
 pub const AXES: Srgba = Srgba::new_opaque(0x47, 0x55, 0x69);
 /// Numbers and labels (#334155).
 #[expect(unused)]

@@ -6,19 +6,22 @@ use three_d::{
     ColorMaterial,
     Context,
     CpuMesh,
+    Degrees,
     Gm,
     Indices,
     Mat3,
+    Mat4,
     Mesh,
     Positions,
     Srgba,
     Vec3,
     Vector3,
     Zero,
+    degrees,
     vec3,
 };
 
-use crate::palette;
+use crate::{palette, utils};
 
 /// A shape rendered on the grid.
 #[derive(Debug)]
@@ -126,35 +129,21 @@ impl PlottingGrid {
         &mut self.shapes
     }
 
-    /// Helper for mesh. Should probably be put somewhere else.
-    fn draw_2d_line(
-        positions: &mut Vec<Vector3<f32>>,
-        indices: &mut Vec<u32>,
-        p1: Vector3<f32>,
-        p2: Vector3<f32>,
-        line_width: f32,
-    ) {
-        // add width perpendicular to the line
+    /// Draws -x → +x axis arrow. Transform accordingly for other axes.
+    fn draw_axis_arrow() -> CpuMesh {
+        // draws unit arrow starting at origin pointing to +x
+        let mut arrow = CpuMesh::arrow(0.92, 0.2, 16);
+        arrow.colors = Some(vec![palette::AXES; arrow.vertex_count()]);
 
-        let dx = p2.x - p1.x;
-        let dy = p2.y - p1.y;
-        let length = dx.hypot(dy);
+        // translate back to negatives and scale up to grid size
+        arrow
+            .transform(
+                Mat4::from_translation(vec3(-5.0, 0.0, 0.0))
+                    * Mat4::from_nonuniform_scale(10.0, 0.12, 0.12),
+            )
+            .unwrap();
 
-        if length == 0.0 {
-            return;
-        }
-
-        let offset = vec3(-dy, dx, 0.0) * (line_width / (2.0 * length));
-        let base = u32::try_from(positions.len()).unwrap();
-
-        positions.push(p1 - offset);
-        positions.push(p1 + offset);
-        positions.push(p2 - offset);
-        positions.push(p2 + offset);
-
-        // winding order: doesn't really matter here since backface culling is usually
-        // disabled but this order ensures both triangle of the quad are facing the same way.
-        indices.extend([base, base + 2, base + 1, base + 1, base + 2, base + 3]);
+        arrow
     }
 
     /// Returns the mesh, redrawing if needed.
@@ -192,7 +181,7 @@ impl PlottingGrid {
                 (vec3(c, 0.0, 0.0), vec3(c, GRID_SIZE_F32, 0.0)),
                 (vec3(c, 0.0, 0.0), vec3(c, -GRID_SIZE_F32, 0.0)),
             ] {
-                Self::draw_2d_line(&mut positions, &mut indices, p1, p2, LINE_WIDTH);
+                utils::draw_2d_line(&mut positions, &mut indices, p1, p2, LINE_WIDTH);
             }
         }
 
@@ -204,6 +193,23 @@ impl PlottingGrid {
             colors: Some(vec![palette::MINOR_GRID; num_positions]),
             ..Default::default()
         };
+
+        // axis meshes
+        let x_axis = Self::draw_axis_arrow();
+
+        let mut y_axis = Self::draw_axis_arrow();
+
+        y_axis
+            .transform(Mat4::from_angle_y(degrees(-90.0)))
+            .unwrap();
+
+        let mut z_axis = Self::draw_axis_arrow();
+
+        z_axis.transform(Mat4::from_angle_z(degrees(90.0))).unwrap();
+
+        let cpu_mesh = [cpu_mesh, x_axis, y_axis, z_axis]
+            .into_iter()
+            .fold(CpuMesh::default(), utils::merge_meshes);
 
         self.mesh = Some(Mesh::new(ctx, &cpu_mesh));
         self.redraw_mesh = false;

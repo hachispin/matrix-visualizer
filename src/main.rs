@@ -20,7 +20,8 @@ use three_d::{
 use crate::grid::PlottingGrid;
 
 mod grid;
-pub mod palette;
+mod palette;
+mod utils;
 
 /// Rotates a rectangle.
 ///
@@ -82,7 +83,6 @@ pub fn main() {
         }
 
         let gm = Gm::new(grid.mesh(&ctx).unwrap(), ColorMaterial::default());
-
         let bg = palette::BACKGROUND;
 
         // turn to normalized
@@ -95,7 +95,7 @@ pub fn main() {
         frame_input
             .screen()
             .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
-            .render(&camera, &gm, &[]);
+            .render(&camera, [&gm], &[]);
 
         FrameOutput::default()
     });
