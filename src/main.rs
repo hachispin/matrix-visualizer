@@ -21,6 +21,7 @@ use crate::grid::PlottingGrid;
 
 mod grid;
 mod palette;
+mod shapes;
 mod utils;
 
 /// Rotates a rectangle.

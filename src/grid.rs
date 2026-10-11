@@ -3,11 +3,8 @@
 
 use anyhow::{Result, bail};
 use three_d::{
-    ColorMaterial,
     Context,
     CpuMesh,
-    Degrees,
-    Gm,
     Indices,
     Mat3,
     Mat4,
@@ -23,57 +20,7 @@ use three_d::{
 
 use crate::{palette, utils};
 
-/// A shape rendered on the grid.
-#[derive(Debug)]
-pub struct GridShape {
-    /// Shape to render when no transformation is applied.
-    original: ShapeType,
-    /// Computed based off `transformations` on `original`.
-    ///
-    /// Must have the same number of points as `original`.
-    transformed: ShapeType,
-    /// Transformations to apply on `original`.
-    transformations: Vec<Mat3>,
-    /// The color of the shape.
-    color: Srgba,
-}
-
-/// Enum representing possible shapes.
-#[derive(Debug, Clone)]
-pub enum ShapeType {
-    Point(Vector3<f32>),
-    Line(Vector3<f32>, Vector3<f32>),
-    /// Connected in order of points. Last point connects to first.
-    Polygon(Vec<Vector3<f32>>),
-}
-
-impl GridShape {
-    /// Constructor.
-    ///
-    /// # Errors
-    ///
-    /// If the `shape` is a `Polygon` variant but has less than three points.
-    pub fn new(shape: ShapeType, color: Srgba) -> Result<Self> {
-        if let ShapeType::Polygon(points) = &shape
-            && points.len() < 3
-        {
-            bail!("A polygon needs at least three points");
-        }
-
-        Ok(Self {
-            original: shape.clone(),
-            transformed: shape, // no transformations applied yet
-            transformations: Vec::new(),
-            color,
-        })
-    }
-}
-
 /// Represents a 3D grid.
-///
-/// The camera shouldn't be able to see outside the grid.
-///
-/// Generally should be declared as mutable.
 pub struct PlottingGrid {
     /// Initially (0, 0, 0).
     centre: Vec3,
@@ -81,8 +28,6 @@ pub struct PlottingGrid {
     // should be the same size as a world unit.
     // NOTE: think about whether this should be constrained (having a max/min value)
     magnification: f32,
-    /// Shapes to render.
-    shapes: Vec<GridShape>,
     /// The mesh. Will be updated when needed.
     ///
     /// Initially, this is set to `None`.
@@ -96,7 +41,6 @@ impl Default for PlottingGrid {
         Self {
             centre: Vec3::zero(),
             magnification: 1.0,
-            shapes: Vec::new(),
             mesh: None,
             redraw_mesh: true,
         }
@@ -104,29 +48,12 @@ impl Default for PlottingGrid {
 }
 
 impl PlottingGrid {
-    pub fn new(centre: Vec3, magnification: f32, shapes: Vec<GridShape>) -> Self {
+    pub fn new(centre: Vec3, magnification: f32) -> Self {
         Self {
             centre,
             magnification,
-            shapes,
             ..Default::default()
         }
-    }
-
-    pub fn shapes(&self) -> &[GridShape] { &self.shapes }
-
-    /// Convenience method for adding a shape.
-    ///
-    /// Equivalent to pushing to [`Self::mut_shapes`].
-    pub fn push_shape(&mut self, shape: GridShape) {
-        self.shapes.push(shape);
-        self.redraw_mesh = true;
-    }
-
-    /// Returns a mutable references to the stored grid shapes.
-    pub fn mut_shapes(&mut self) -> &mut [GridShape] {
-        self.redraw_mesh = true;
-        &mut self.shapes
     }
 
     /// Draws -x → +x axis arrow. Transform accordingly for other axes.
