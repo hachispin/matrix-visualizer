@@ -175,7 +175,7 @@ impl PlottingGrid {
 
         // draw x-y grid
         //
-        // axis lines should be drawn starting at x=0 or y=0 so the origin stays the origin
+        // axis lines should be drawn starting at x = 0 or y = 0 so the origin stays the origin
         // (since it's not guaranteed to fit an integer amount of gridlines at some zoom).
         //
         // also not planning on x/y axis stretching as a feature for now.
@@ -183,78 +183,17 @@ impl PlottingGrid {
         let mut positions = Vec::new();
         let mut indices = Vec::new();
 
-        // +x, +y
-        for c in (0..=GRID_SIZE).step_by(1) {
+        for c in -GRID_SIZE..=GRID_SIZE {
             let c = c as f32;
 
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(0.0, c, 0.0),
-                vec3(GRID_SIZE_F32, c, 0.0),
-                LINE_WIDTH,
-            );
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(c, 0.0, 0.0),
-                vec3(c, GRID_SIZE_F32, 0.0),
-                LINE_WIDTH,
-            );
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(0.0, c, 0.0),
-                vec3(-GRID_SIZE_F32, c, 0.0),
-                LINE_WIDTH,
-            );
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(c, 0.0, 0.0),
-                vec3(c, -GRID_SIZE_F32, 0.0),
-                LINE_WIDTH,
-            );
-        }
-
-        // -x, -y
-        for c in (-GRID_SIZE..=0).rev() {
-            let c = c as f32;
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(0.0, c, 0.0),
-                vec3(GRID_SIZE_F32, c, 0.0),
-                LINE_WIDTH,
-            );
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(c, 0.0, 0.0),
-                vec3(c, GRID_SIZE_F32, 0.0),
-                LINE_WIDTH,
-            );
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(0.0, c, 0.0),
-                vec3(-GRID_SIZE_F32, c, 0.0),
-                LINE_WIDTH,
-            );
-
-            Self::draw_2d_line(
-                &mut positions,
-                &mut indices,
-                vec3(c, 0.0, 0.0),
-                vec3(c, -GRID_SIZE_F32, 0.0),
-                LINE_WIDTH,
-            );
+            for (p1, p2) in [
+                (vec3(0.0, c, 0.0), vec3(GRID_SIZE_F32, c, 0.0)),
+                (vec3(0.0, c, 0.0), vec3(-GRID_SIZE_F32, c, 0.0)),
+                (vec3(c, 0.0, 0.0), vec3(c, GRID_SIZE_F32, 0.0)),
+                (vec3(c, 0.0, 0.0), vec3(c, -GRID_SIZE_F32, 0.0)),
+            ] {
+                Self::draw_2d_line(&mut positions, &mut indices, p1, p2, LINE_WIDTH);
+            }
         }
 
         let num_positions = positions.len();
