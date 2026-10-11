@@ -21,40 +21,15 @@ use three_d::{
 use crate::{palette, utils};
 
 /// Represents a 3D grid.
+#[derive(Default)]
 pub struct PlottingGrid {
-    /// Initially (0, 0, 0).
-    centre: Vec3,
-    // At a magnification of 1, a plotting unit
-    // should be the same size as a world unit.
-    // NOTE: think about whether this should be constrained (having a max/min value)
-    magnification: f32,
-    /// The mesh. Will be updated when needed.
-    ///
-    /// Initially, this is set to `None`.
+    /// Initially [`None`].
     mesh: Option<Mesh>,
-    /// Flag set for whenever the mesh needs to be redrawn.
-    redraw_mesh: bool,
-}
-
-impl Default for PlottingGrid {
-    fn default() -> Self {
-        Self {
-            centre: Vec3::zero(),
-            magnification: 1.0,
-            mesh: None,
-            redraw_mesh: true,
-        }
-    }
+    // ↑  TODO: Should this initally be set to the mesh of a grid with default arguments?
 }
 
 impl PlottingGrid {
-    pub fn new(centre: Vec3, magnification: f32) -> Self {
-        Self {
-            centre,
-            magnification,
-            ..Default::default()
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Draws -x → +x axis arrow. Transform accordingly for other axes.
     fn draw_axis_arrow() -> CpuMesh {
@@ -73,10 +48,10 @@ impl PlottingGrid {
         arrow
     }
 
-    /// Returns the mesh, redrawing if needed.
-    ///
-    /// This needs a context for the mesh to attach to.
-    pub fn mesh(&mut self, ctx: &Context) -> Option<&Mesh> {
+    /// Draws the mesh. Should only be called if needed as this draws on every call.
+    pub fn mesh(&mut self, ctx: &Context, centre: Vec3, magnification: f32) -> Option<&Mesh> {
+        // TODO: Respect `centre` and `magnification`.
+
         /// The cubic grid extends out `GRID_SIZE` world
         /// units from its origin in all six directions.
         const GRID_SIZE: i32 = 5;
@@ -84,10 +59,6 @@ impl PlottingGrid {
         const LINE_WIDTH: f32 = 0.05;
 
         const GRID_SIZE_F32: f32 = 5.0;
-
-        if !self.redraw_mesh {
-            return self.const_mesh();
-        }
 
         // draw x-y grid
         //
@@ -139,25 +110,10 @@ impl PlottingGrid {
             .fold(CpuMesh::default(), utils::merge_meshes);
 
         self.mesh = Some(Mesh::new(ctx, &cpu_mesh));
-        self.redraw_mesh = false;
 
         self.mesh.as_ref()
     }
 
-    /// Returns the mesh without redrawing.
-    ///
-    /// In other words, a simple getter for the mesh field.
+    /// Returns the currently stored mesh without redrawing.
     pub const fn const_mesh(&self) -> Option<&Mesh> { self.mesh.as_ref() }
-
-    pub fn zoom_in(&mut self) {
-        self.magnification *= 2.0;
-        self.redraw_mesh = true;
-        todo!()
-    }
-
-    pub fn zoom_out(&mut self) {
-        self.magnification /= 2.0;
-        self.redraw_mesh = true;
-        todo!()
-    }
 }

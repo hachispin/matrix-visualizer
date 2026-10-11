@@ -83,7 +83,15 @@ pub fn main() {
             }
         }
 
-        let gm = Gm::new(grid.mesh(&ctx).unwrap(), ColorMaterial::default());
+        // TODO: Attach these to certain inputs.
+        let centre = Vec3::zero();
+        let magnification = 1.0;
+
+        let gm = Gm::new(
+            grid.mesh(&ctx, centre, magnification).unwrap(),
+            ColorMaterial::default(),
+        );
+
         let bg = palette::BACKGROUND;
 
         // turn to normalized
