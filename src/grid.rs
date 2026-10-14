@@ -109,7 +109,7 @@ impl PlottingGrid {
         let cpu_mesh = CpuMesh {
             positions: Positions::F32(positions),
             indices: Indices::U32(indices),
-            colors: Some(vec![palette::MINOR_GRID; num_positions]),
+            colors: Some(vec![palette::GRID; num_positions]),
             ..Default::default()
         };
 

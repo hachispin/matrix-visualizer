@@ -2,27 +2,18 @@
 
 use three_d::Srgba;
 
-/// Background behind the plotting area (#F8FAFC).
-pub const BACKGROUND: Srgba = Srgba::new_opaque(0xF8, 0xFA, 0xFC);
-#[expect(unused)]
-/// Subtle tint inside the plotting box (#E8EFF5).
-pub const PLOT_AREA: Srgba = Srgba::new_opaque(0xE8, 0xEF, 0xF5);
-/// Minor grid lines (#BBC9D8).
-pub const MINOR_GRID: Srgba = Srgba::new_opaque(0xBB, 0xC9, 0xD8);
-/// Major grid lines (#93A7BA).
-#[expect(unused)]
-pub const MAJOR_GRID: Srgba = Srgba::new_opaque(0x93, 0xA7, 0xBA);
-/// Outline of the 3D plotting box (#9AA8B8).
-#[expect(unused)]
-pub const CUBE_OUTLINE: Srgba = Srgba::new_opaque(0x9A, 0xA8, 0xB8);
-/// Axes and arrowheads (#475569).
+/// For some reason, [`three_d::ClearState`] wants normalized RGB values instead of [`Srgba`].
+///
+/// This is #F8FAFC, by the way.
+pub const BACKGROUND: (f32, f32, f32) = (0.972_549, 0.980_392_16, 0.988_235_3);
+/// Not to be confused with [`AXES`].
+pub const GRID: Srgba = Srgba::new_opaque(0xBB, 0xC9, 0xD8);
 pub const AXES: Srgba = Srgba::new_opaque(0x47, 0x55, 0x69);
-/// Numbers and labels (#334155).
+
 #[expect(unused)]
 pub const LABELS: Srgba = Srgba::new_opaque(0x33, 0x41, 0x55);
 
-/// Colours assigned to plotted shapes in order: blue, orange, teal, purple,
-/// gold, and rose.
+/// Possible colours that shapes can have.
 #[expect(unused)]
 pub const SHAPE_COLORS: [Srgba; 6] = [
     Srgba::new_opaque(0x00, 0x6D, 0xAA),

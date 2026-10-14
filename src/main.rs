@@ -108,14 +108,7 @@ pub fn main() {
             ColorMaterial::default(),
         );
 
-        let bg = palette::BACKGROUND;
-
-        // turn to normalized
-        let (r, g, b) = (
-            f32::from(bg.r) / 255.0,
-            f32::from(bg.g) / 255.0,
-            f32::from(bg.b) / 255.0,
-        );
+        let (r, g, b) = palette::BACKGROUND;
 
         frame_input
             .screen()
