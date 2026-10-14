@@ -70,8 +70,29 @@ impl PlottingGrid {
         let mut positions = Vec::new();
         let mut indices = Vec::new();
 
-        for c in -GRID_SIZE..=GRID_SIZE {
-            let c = c as f32;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "iterating over a float range is annoying"
+        )]
+        let (start, end) = (
+            (-GRID_SIZE_F32 / magnification).ceil() as i32,
+            (GRID_SIZE_F32 / magnification).floor() as i32,
+        );
+
+        // this works out. to understand why take the case of 0.5x magnification.
+        // the range doubles but each value `c` from the range is halved. so it
+        // still ends up being inside the grid while just having more lines. we
+        // basically just get a larger range and squish it to the same length.
+        //
+        // | magnification | range    | interpolated
+        // | 0.5           | -10..=10 | -5, -4.5, …, 5
+        // | 1             | -5..=5   | -5, -4, …, 5
+        // | 2             | -2..=2   | -4, -2, …, 5
+        //
+        // this approach avoids the sort of unpredictable FPA precision loss (which would happen
+        // in the trivial appraoch of just incrementing `c` by `spacing` until `GRID_SIZE`).
+        for c in start..=end {
+            let c = c as f32 * magnification;
 
             for (p1, p2) in [
                 (vec3(0.0, c, 0.0), vec3(GRID_SIZE_F32, c, 0.0)),

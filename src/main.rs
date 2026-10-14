@@ -53,12 +53,17 @@ pub fn main() {
         100.0,
     );
 
+    // TODO: Attach these to certain inputs.
+    let centre = Vec3::zero();
+    let mut magnification = 1.0;
+
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
         // rotate the camera around the graph on drag
         for event in &mut frame_input.events {
             const DRAG_MULTIPLIER: f32 = 0.005;
+            const ZOOM_FACTOR: f32 = 1.1;
 
             // pattern match this event
             if let Event::MouseMotion {
@@ -81,11 +86,22 @@ pub fn main() {
                 // prevent other event handlers from using this event again
                 *handled = true;
             }
-        }
 
-        // TODO: Attach these to certain inputs.
-        let centre = Vec3::zero();
-        let magnification = 1.0;
+            if let Event::MouseWheel { delta, handled, .. } = event {
+                if *handled {
+                    continue;
+                }
+
+                // vertical scroll amount (positive = up)
+                if delta.1 > 0.0 {
+                    magnification *= ZOOM_FACTOR;
+                } else if delta.1 < 0.0 {
+                    magnification /= ZOOM_FACTOR;
+                }
+
+                *handled = true;
+            }
+        }
 
         let gm = Gm::new(
             grid.mesh(&ctx, centre, magnification).unwrap(),
