@@ -1,6 +1,11 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::cast_precision_loss)]
 
+mod grid;
+mod palette;
+mod shapes;
+mod utils;
+
 use three_d::{
     Camera,
     ClearState,
@@ -17,13 +22,6 @@ use three_d::{
     vec3,
 };
 
-use crate::grid::PlottingGrid;
-
-mod grid;
-mod palette;
-mod shapes;
-mod utils;
-
 /// Rotates a rectangle.
 ///
 /// # Panics
@@ -37,7 +35,6 @@ pub fn main() {
     .unwrap();
 
     let ctx = window.gl();
-    let mut grid = PlottingGrid::default();
 
     // A "perspective" camera (as opposed to an orthographic one) is
     // often preferred as it's more natural to the eye. Though, for a
@@ -103,7 +100,7 @@ pub fn main() {
         }
 
         let gm = Gm::new(
-            grid.mesh(&ctx, centre, magnification).unwrap(),
+            grid::mesh(&ctx, centre, magnification),
             ColorMaterial::default(),
         );
 
