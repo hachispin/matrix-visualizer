@@ -29,6 +29,11 @@ pub struct PlottingGrid {
 }
 
 impl PlottingGrid {
+    /// The cubic grid extends out `GRID_SIZE` world units from its origin in all six directions.
+    const GRID_SIZE: f32 = 5.0;
+    /// Width of grid lines.
+    const LINE_WIDTH: f32 = 0.05;
+
     pub fn new() -> Self { Self::default() }
 
     /// Draws -x → +x axis arrow. Transform accordingly for other axes.
@@ -40,8 +45,8 @@ impl PlottingGrid {
         // translate back to negatives and scale up to grid size
         arrow
             .transform(
-                Mat4::from_translation(vec3(-5.0, 0.0, 0.0))
-                    * Mat4::from_nonuniform_scale(10.0, 0.12, 0.12),
+                Mat4::from_translation(vec3(-Self::GRID_SIZE, 0.0, 0.0))
+                    * Mat4::from_nonuniform_scale(Self::GRID_SIZE * 2.0, 0.12, 0.12),
             )
             .unwrap();
 
@@ -51,14 +56,6 @@ impl PlottingGrid {
     /// Draws the mesh. Should only be called if needed as this draws on every call.
     pub fn mesh(&mut self, ctx: &Context, centre: Vec3, magnification: f32) -> Option<&Mesh> {
         // TODO: Respect `centre` and `magnification`.
-
-        /// The cubic grid extends out `GRID_SIZE` world
-        /// units from its origin in all six directions.
-        const GRID_SIZE: i32 = 5;
-        /// Width of quads that form the grid.
-        const LINE_WIDTH: f32 = 0.05;
-
-        const GRID_SIZE_F32: f32 = 5.0;
 
         // draw x-y grid
         //
@@ -75,8 +72,8 @@ impl PlottingGrid {
             reason = "iterating over a float range is annoying"
         )]
         let (start, end) = (
-            (-GRID_SIZE_F32 / magnification).ceil() as i32,
-            (GRID_SIZE_F32 / magnification).floor() as i32,
+            (-Self::GRID_SIZE / magnification).ceil() as i32,
+            (Self::GRID_SIZE / magnification).floor() as i32,
         );
 
         // this works out. to understand why take the case of 0.5x magnification.
@@ -87,20 +84,25 @@ impl PlottingGrid {
         // | magnification | range    | interpolated
         // | 0.5           | -10..=10 | -5, -4.5, …, 5
         // | 1             | -5..=5   | -5, -4, …, 5
-        // | 2             | -2..=2   | -4, -2, …, 5
+        // | 2             | -2..=2   | -4, -2, …, 4
         //
         // this approach avoids the sort of unpredictable FPA precision loss (which would happen
         // in the trivial appraoch of just incrementing `c` by `spacing` until `GRID_SIZE`).
         for c in start..=end {
             let c = c as f32 * magnification;
 
+            // to not overlap with axes
+            if c == 0.0 {
+                continue;
+            }
+
             for (p1, p2) in [
-                (vec3(0.0, c, 0.0), vec3(GRID_SIZE_F32, c, 0.0)),
-                (vec3(0.0, c, 0.0), vec3(-GRID_SIZE_F32, c, 0.0)),
-                (vec3(c, 0.0, 0.0), vec3(c, GRID_SIZE_F32, 0.0)),
-                (vec3(c, 0.0, 0.0), vec3(c, -GRID_SIZE_F32, 0.0)),
+                (vec3(0.0, c, 0.0), vec3(Self::GRID_SIZE, c, 0.0)),
+                (vec3(0.0, c, 0.0), vec3(-Self::GRID_SIZE, c, 0.0)),
+                (vec3(c, 0.0, 0.0), vec3(c, Self::GRID_SIZE, 0.0)),
+                (vec3(c, 0.0, 0.0), vec3(c, -Self::GRID_SIZE, 0.0)),
             ] {
-                utils::draw_2d_line(&mut positions, &mut indices, p1, p2, LINE_WIDTH);
+                utils::draw_2d_line(&mut positions, &mut indices, p1, p2, Self::LINE_WIDTH);
             }
         }
 
@@ -115,23 +117,20 @@ impl PlottingGrid {
 
         // axis meshes
         let x_axis = Self::draw_axis_arrow();
-
         let mut y_axis = Self::draw_axis_arrow();
+        let mut z_axis = Self::draw_axis_arrow();
 
-        y_axis
+        y_axis.transform(Mat4::from_angle_z(degrees(90.0))).unwrap();
+
+        z_axis
             .transform(Mat4::from_angle_y(degrees(-90.0)))
             .unwrap();
 
-        let mut z_axis = Self::draw_axis_arrow();
-
-        z_axis.transform(Mat4::from_angle_z(degrees(90.0))).unwrap();
-
-        let cpu_mesh = [cpu_mesh, x_axis, y_axis, z_axis]
+        let cpu_mesh = [cpu_mesh, x_axis, z_axis, y_axis]
             .into_iter()
             .fold(CpuMesh::default(), utils::merge_meshes);
 
         self.mesh = Some(Mesh::new(ctx, &cpu_mesh));
-
         self.mesh.as_ref()
     }
 

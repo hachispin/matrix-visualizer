@@ -31,8 +31,7 @@ mod utils;
 /// Window failed to be created.
 pub fn main() {
     let window = Window::new(WindowSettings {
-        title: "Rectangle".to_string(),
-        max_size: Some((1280, 720)),
+        title: "Matrix Visualizer".to_string(),
         ..Default::default()
     })
     .unwrap();
