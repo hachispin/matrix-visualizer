@@ -2,21 +2,7 @@
 #![allow(unused, reason = "WIP")]
 
 use anyhow::{Result, bail};
-use three_d::{
-    Context,
-    CpuMesh,
-    Indices,
-    Mat3,
-    Mat4,
-    Mesh,
-    Positions,
-    Srgba,
-    Vec3,
-    Vector3,
-    Zero,
-    degrees,
-    vec3,
-};
+use three_d::{Context, CpuMesh, Indices, Mesh, Positions, prelude::*};
 
 use crate::{palette, utils};
 
@@ -75,9 +61,14 @@ pub fn mesh(ctx: &Context, centre: Vec3, magnification: f32) -> Mesh {
     // | 1             | -5..=5   | -5, -4, …, 5
     // | 2             | -2..=2   | -4, -2, …, 4
     //
-    // this approach avoids the sort of unpredictable FPA precision loss (which would happen
+    // this approach avoids the sort of accumulated FPA precision loss (which would happen
     // in the trivial appraoch of just incrementing `c` by `spacing` until `GRID_SIZE`).
+
     for c in start..=end {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "magnification is clamped in main"
+        )]
         let c = c as f32 * magnification;
 
         // to not overlap with axes

@@ -1,5 +1,4 @@
 #![warn(clippy::pedantic)]
-#![allow(clippy::cast_precision_loss)]
 
 mod grid;
 mod palette;
@@ -14,12 +13,9 @@ use three_d::{
     FrameOutput,
     Gm,
     MouseButton,
-    Vec3,
     Window,
     WindowSettings,
-    Zero,
-    degrees,
-    vec3,
+    prelude::*,
 };
 
 /// Rotates a rectangle.
@@ -98,6 +94,8 @@ pub fn main() {
                 *handled = true;
             }
         }
+
+        magnification = magnification.clamp(0.001, 1000.0);
 
         let gm = Gm::new(
             grid::mesh(&ctx, centre, magnification),
