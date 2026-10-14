@@ -1,7 +1,6 @@
 //! Module responsible for handling and rendering the grid.
-#![allow(unused, reason = "WIP")]
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use three_d::{Context, CpuMesh, Indices, Mesh, Positions, prelude::*};
 
 use crate::{palette, utils};
@@ -12,24 +11,22 @@ const GRID_SIZE: f32 = 5.0;
 const LINE_WIDTH: f32 = 0.05;
 
 /// Draws -x → +x axis arrow. Transform accordingly for other axes.
-fn draw_axis_arrow() -> CpuMesh {
+fn draw_axis_arrow() -> Result<CpuMesh> {
     // draws unit arrow starting at origin pointing to +x
     let mut arrow = CpuMesh::arrow(0.92, 0.2, 16);
     arrow.colors = Some(vec![palette::AXES; arrow.vertex_count()]);
 
     // translate back to negatives and scale up to grid size
-    arrow
-        .transform(
-            Mat4::from_translation(vec3(-GRID_SIZE, 0.0, 0.0))
-                * Mat4::from_nonuniform_scale(GRID_SIZE * 2.0, 0.12, 0.12),
-        )
-        .unwrap();
+    arrow.transform(
+        Mat4::from_translation(vec3(-GRID_SIZE, 0.0, 0.0))
+            * Mat4::from_nonuniform_scale(GRID_SIZE * 2.0, 0.12, 0.12),
+    )?;
 
-    arrow
+    Ok(arrow)
 }
 
 /// Draws the grid mesh. Should only be called if needed as this draws on every call.
-pub fn mesh(ctx: &Context, centre: Vec3, magnification: f32) -> Mesh {
+pub fn mesh(ctx: &Context, _centre: Vec3, magnification: f32) -> Result<Mesh> {
     // TODO: Respect `centre`.
 
     // draw x-y grid
@@ -96,19 +93,16 @@ pub fn mesh(ctx: &Context, centre: Vec3, magnification: f32) -> Mesh {
     };
 
     // axis meshes
-    let x_axis = draw_axis_arrow();
-    let mut y_axis = draw_axis_arrow();
-    let mut z_axis = draw_axis_arrow();
+    let x_axis = draw_axis_arrow()?;
+    let mut y_axis = x_axis.clone();
+    let mut z_axis = x_axis.clone();
 
-    y_axis.transform(Mat4::from_angle_z(degrees(90.0))).unwrap();
-
-    z_axis
-        .transform(Mat4::from_angle_y(degrees(-90.0)))
-        .unwrap();
+    y_axis.transform(Mat4::from_angle_z(degrees(90.0)))?;
+    z_axis.transform(Mat4::from_angle_y(degrees(-90.0)))?;
 
     let cpu_mesh = [cpu_mesh, x_axis, z_axis, y_axis]
         .into_iter()
         .fold(CpuMesh::default(), utils::merge_meshes);
 
-    Mesh::new(ctx, &cpu_mesh)
+    Ok(Mesh::new(ctx, &cpu_mesh))
 }

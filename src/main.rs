@@ -5,6 +5,7 @@ mod palette;
 mod shapes;
 mod utils;
 
+use anyhow::Result;
 use three_d::{
     Camera,
     ClearState,
@@ -20,15 +21,18 @@ use three_d::{
 
 /// Rotates a rectangle.
 ///
-/// # Panics
+/// # Errors
 ///
 /// Window failed to be created.
-pub fn main() {
+///
+/// # Panics
+///
+/// Error occurs during render loop.
+pub fn main() -> Result<()> {
     let window = Window::new(WindowSettings {
         title: "Matrix Visualizer".to_string(),
         ..Default::default()
-    })
-    .unwrap();
+    })?;
 
     let ctx = window.gl();
 
@@ -98,7 +102,7 @@ pub fn main() {
         magnification = magnification.clamp(0.001, 1000.0);
 
         let gm = Gm::new(
-            grid::mesh(&ctx, centre, magnification),
+            grid::mesh(&ctx, centre, magnification).expect("Failed to construct grid mesh!"),
             ColorMaterial::default(),
         );
 
@@ -111,4 +115,6 @@ pub fn main() {
 
         FrameOutput::default()
     });
+
+    Ok(())
 }
