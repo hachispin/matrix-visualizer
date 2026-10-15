@@ -1,35 +1,44 @@
 //! Place to put general utility functions.
 
-use three_d::{CpuMesh, Indices, Positions, Srgba, Vector3, vec3};
+use three_d::{CpuMesh, Indices, Positions, prelude::*};
 
 /// Merges two meshes into one mesh.
 pub fn merge_meshes(a: CpuMesh, b: CpuMesh) -> CpuMesh {
-    let mut positions = a.positions.into_f32();
-    let other_positions = b.positions.into_f32();
+    let a_len = a.positions.len();
+    let b_len = b.positions.len();
 
-    let a_count = positions.len();
-    let b_count = other_positions.len();
-    let offset = u32::try_from(a_count).unwrap();
-    let b_count_u32 = u32::try_from(b_count).unwrap();
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "surely one does not have a mesh with u32::MAX + 1 positions?"
+    )]
+    let (a_len_u32, b_len_u32) = (a_len as u32, b_len as u32);
 
-    // no indices = order of vertices
-    let mut indices = a
+    let a_indices = a
         .indices
         .into_u32()
-        .unwrap_or_else(|| (0..offset).collect());
+        .unwrap_or_else(|| (0..(a_len_u32)).collect());
 
-    let other_indices = b
+    let b_indices = b
         .indices
         .into_u32()
-        .unwrap_or_else(|| (0..b_count_u32).collect());
+        .unwrap_or_else(|| (0..(b_len_u32)).collect());
 
-    indices.extend(other_indices.into_iter().map(|i| i + offset));
+    let a_colors = a.colors.unwrap_or_else(|| vec![Srgba::WHITE; a_len]);
+    let b_colors = b.colors.unwrap_or_else(|| vec![Srgba::WHITE; b_len]);
 
-    let mut colors = a.colors.unwrap_or_else(|| vec![Srgba::WHITE; a_count]);
+    let indices = a_indices
+        .into_iter()
+        .chain(b_indices.into_iter().map(|i| i + a_len_u32))
+        .collect();
 
-    colors.extend(b.colors.unwrap_or_else(|| vec![Srgba::WHITE; b_count]));
+    let colors = a_colors.into_iter().chain(b_colors).collect();
 
-    positions.extend(other_positions);
+    let positions = a
+        .positions
+        .into_f32()
+        .into_iter()
+        .chain(b.positions.into_f32())
+        .collect();
 
     CpuMesh {
         positions: Positions::F32(positions),
@@ -50,6 +59,7 @@ pub fn draw_2d_line(
     // add width perpendicular to the line
     let dx = p2.x - p1.x;
     let dy = p2.y - p1.y;
+
     let length = dx.hypot(dy);
 
     if length == 0.0 {
@@ -57,7 +67,12 @@ pub fn draw_2d_line(
     }
 
     let offset = vec3(-dy, dx, 0.0) * (line_width / (2.0 * length));
-    let base = u32::try_from(positions.len()).unwrap();
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "will never be realistically truncated"
+    )]
+    let base = positions.len() as u32;
 
     positions.push(p1 - offset);
     positions.push(p1 + offset);
@@ -68,3 +83,13 @@ pub fn draw_2d_line(
     // disabled but this order ensures both triangle of the quad are facing the same way.
     indices.extend([base, base + 2, base + 1, base + 1, base + 2, base + 3]);
 }
+
+// will probably use later
+//
+// pub fn graph_to_world(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
+//     (point - centre) * magnification
+// }
+//
+// pub fn world_to_graph(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
+//     point / magnification + centre
+// }
