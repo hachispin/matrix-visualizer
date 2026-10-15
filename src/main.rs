@@ -1,4 +1,20 @@
-#![warn(clippy::pedantic)]
+#![warn(
+    clippy::pedantic,
+    // nursery lints:
+    clippy::use_self,
+    clippy::or_fun_call,
+    clippy::redundant_clone,
+    clippy::equatable_if_let,
+    clippy::needless_collect,
+    // restriction lints:
+    clippy::redundant_type_annotations,
+    clippy::semicolon_inside_block,
+    clippy::allow_attributes
+)]
+#![allow(
+    clippy::enum_glob_use,
+    reason = "when used, scope is restricted (e.g., inside functions)"
+)]
 
 mod grid;
 mod palette;
