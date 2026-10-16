@@ -29,13 +29,90 @@ use three_d::{
     Event,
     FrameOutput,
     Gm,
+    Key,
     MouseButton,
     Window,
     WindowSettings,
     prelude::*,
 };
 
-/// Rotates a rectangle.
+fn input_handler(
+    events: &mut [Event],
+    camera: &mut Camera,
+    centre: &mut Vec3,
+    magnification: &mut f32,
+) {
+    // rotate the camera around the graph on drag
+    for event in events {
+        const DRAG_MULTIPLIER: f32 = 0.005;
+        const ZOOM_FACTOR: f32 = 1.1;
+
+        // pattern match this event
+        if let Event::MouseMotion {
+            button: Some(MouseButton::Left),
+            delta,
+            handled,
+            ..
+        } = event
+        {
+            if *handled {
+                continue;
+            }
+
+            camera.rotate_around_with_fixed_up(
+                Vec3::zero(),
+                DRAG_MULTIPLIER * delta.0,
+                DRAG_MULTIPLIER * delta.1,
+            );
+
+            // prevent other event handlers from using this event again
+            *handled = true;
+        }
+
+        if let Event::MouseWheel { delta, handled, .. } = event {
+            if *handled {
+                continue;
+            }
+
+            // vertical scroll amount (positive = up)
+            if delta.1 > 0.0 {
+                *magnification *= ZOOM_FACTOR;
+            } else if delta.1 < 0.0 {
+                *magnification /= ZOOM_FACTOR;
+            }
+
+            *handled = true;
+        }
+
+        // demo
+        if let Event::KeyPress {
+            kind: k @ (Key::X | Key::Y | Key::Z),
+            modifiers,
+            handled,
+            ..
+        } = event
+        {
+            if *handled {
+                continue;
+            }
+
+            let offset = if modifiers.shift { -1.0 } else { 1.0 };
+
+            match k {
+                Key::X => centre.x += offset,
+                Key::Y => centre.y += offset,
+                Key::Z => centre.z += offset,
+                _ => unreachable!(),
+            }
+
+            dbg!(&centre, &magnification);
+
+            *handled = true;
+        }
+    }
+}
+
+/// Entry point?
 ///
 /// # Errors
 ///
@@ -65,60 +142,24 @@ pub fn main() -> Result<()> {
         100.0,
     );
 
-    // TODO: Attach these to certain inputs.
-    let centre = Vec3::zero();
+    // NOTE: the centre (or more like offset) is stored in grid squares!
+    let mut centre = Vec3::zero();
     let mut magnification = 1.0;
 
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
-        // rotate the camera around the graph on drag
-        for event in &mut frame_input.events {
-            const DRAG_MULTIPLIER: f32 = 0.005;
-            const ZOOM_FACTOR: f32 = 1.1;
-
-            // pattern match this event
-            if let Event::MouseMotion {
-                button: Some(MouseButton::Left),
-                delta,
-                handled,
-                ..
-            } = event
-            {
-                if *handled {
-                    continue;
-                }
-
-                camera.rotate_around_with_fixed_up(
-                    Vec3::zero(),
-                    DRAG_MULTIPLIER * delta.0,
-                    DRAG_MULTIPLIER * delta.1,
-                );
-
-                // prevent other event handlers from using this event again
-                *handled = true;
-            }
-
-            if let Event::MouseWheel { delta, handled, .. } = event {
-                if *handled {
-                    continue;
-                }
-
-                // vertical scroll amount (positive = up)
-                if delta.1 > 0.0 {
-                    magnification *= ZOOM_FACTOR;
-                } else if delta.1 < 0.0 {
-                    magnification /= ZOOM_FACTOR;
-                }
-
-                *handled = true;
-            }
-        }
+        input_handler(
+            &mut frame_input.events,
+            &mut camera,
+            &mut centre,
+            &mut magnification,
+        );
 
         magnification = magnification.clamp(0.001, 1000.0);
 
         let gm = Gm::new(
-            grid::mesh(&ctx, centre, magnification).expect("Failed to construct grid mesh!"),
+            grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
             ColorMaterial::default(),
         );
 

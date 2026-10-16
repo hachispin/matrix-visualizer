@@ -25,9 +25,29 @@ fn draw_axis_arrow() -> Result<CpuMesh> {
     Ok(arrow)
 }
 
+/// Keeps gridline spacing between 1 and 2 in world space.
+fn adjust_magnification(magnification: f32) -> f32 {
+    // TODO: Perhaps use "nicer" intervals, e.g., {…, 0.1, 0.2, 0.5, 1, 2, 5, 10, …}.
+
+    let mut magnification = magnification;
+
+    while magnification < 0.5 {
+        magnification *= 2.0;
+    }
+
+    while magnification > 1.0 {
+        magnification /= 2.0;
+    }
+
+    magnification
+}
+
 /// Draws the grid mesh. Should only be called if needed as this draws on every call.
-pub fn mesh(ctx: &Context, _centre: Vec3, magnification: f32) -> Result<Mesh> {
-    // TODO: Respect `centre`.
+///
+/// This doesn't need to know what the centre is. The grid stays the same regardless. Think of it
+/// like this: the grid is not moved through the graph - the graph is being moved through the grid.
+pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
+    let magnification = adjust_magnification(magnification);
 
     // draw x-y grid
     //
@@ -58,8 +78,8 @@ pub fn mesh(ctx: &Context, _centre: Vec3, magnification: f32) -> Result<Mesh> {
     // | 1             | -5..=5   | -5, -4, …, 5
     // | 2             | -2..=2   | -4, -2, …, 4
     //
-    // this approach avoids the sort of accumulated FPA precision loss (which would happen
-    // in the trivial appraoch of just incrementing `c` by `spacing` until `GRID_SIZE`).
+    // this implementation avoids the sort of accumulated FPA precision loss (which would
+    // happen in the trivial approach of just incrementing `c` by `spacing` until `GRID_SIZE`).
 
     for c in start..=end {
         #[expect(
@@ -79,7 +99,7 @@ pub fn mesh(ctx: &Context, _centre: Vec3, magnification: f32) -> Result<Mesh> {
             (vec3(c, 0.0, 0.0), vec3(c, GRID_SIZE, 0.0)),
             (vec3(c, 0.0, 0.0), vec3(c, -GRID_SIZE, 0.0)),
         ] {
-            utils::draw_2d_line(&mut positions, &mut indices, p1, p2, LINE_WIDTH);
+            utils::draw_2d_line(&mut positions, &mut indices, p1, p2, LINE_WIDTH)?;
         }
     }
 
@@ -102,7 +122,7 @@ pub fn mesh(ctx: &Context, _centre: Vec3, magnification: f32) -> Result<Mesh> {
 
     let cpu_mesh = [cpu_mesh, x_axis, z_axis, y_axis]
         .into_iter()
-        .fold(CpuMesh::default(), utils::merge_meshes);
+        .try_fold(CpuMesh::default(), utils::merge_meshes)?;
 
     Ok(Mesh::new(ctx, &cpu_mesh))
 }

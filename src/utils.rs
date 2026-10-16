@@ -1,17 +1,15 @@
 //! Place to put general utility functions.
 
+use anyhow::Result;
 use three_d::{CpuMesh, Indices, Positions, prelude::*};
 
 /// Merges two meshes into one mesh.
-pub fn merge_meshes(a: CpuMesh, b: CpuMesh) -> CpuMesh {
+pub fn merge_meshes(a: CpuMesh, b: CpuMesh) -> Result<CpuMesh> {
     let a_len = a.positions.len();
     let b_len = b.positions.len();
 
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "surely one does not have a mesh with u32::MAX + 1 positions?"
-    )]
-    let (a_len_u32, b_len_u32) = (a_len as u32, b_len as u32);
+    let a_len_u32 = u32::try_from(a_len)?;
+    let b_len_u32 = u32::try_from(b_len)?;
 
     let a_indices = a
         .indices
@@ -40,12 +38,12 @@ pub fn merge_meshes(a: CpuMesh, b: CpuMesh) -> CpuMesh {
         .chain(b.positions.into_f32())
         .collect();
 
-    CpuMesh {
+    Ok(CpuMesh {
         positions: Positions::F32(positions),
         indices: Indices::U32(indices),
         colors: Some(colors),
         ..Default::default()
-    }
+    })
 }
 
 /// Draws a 2D line with a width.
@@ -55,7 +53,7 @@ pub fn draw_2d_line(
     p1: Vector3<f32>,
     p2: Vector3<f32>,
     line_width: f32,
-) {
+) -> Result<()> {
     // add width perpendicular to the line
     let dx = p2.x - p1.x;
     let dy = p2.y - p1.y;
@@ -63,16 +61,11 @@ pub fn draw_2d_line(
     let length = dx.hypot(dy);
 
     if length == 0.0 {
-        return;
+        return Ok(());
     }
 
     let offset = vec3(-dy, dx, 0.0) * (line_width / (2.0 * length));
-
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "will never be realistically truncated"
-    )]
-    let base = positions.len() as u32;
+    let base = u32::try_from(positions.len())?;
 
     positions.push(p1 - offset);
     positions.push(p1 + offset);
@@ -82,6 +75,8 @@ pub fn draw_2d_line(
     // winding order: doesn't really matter here since backface culling is usually
     // disabled but this order ensures both triangle of the quad are facing the same way.
     indices.extend([base, base + 2, base + 1, base + 1, base + 2, base + 3]);
+
+    Ok(())
 }
 
 // will probably use later
