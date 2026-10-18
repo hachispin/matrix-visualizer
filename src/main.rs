@@ -36,12 +36,17 @@ use three_d::{
     prelude::*,
 };
 
+/// Returns a boolean indicating if the grid is to be redrawn.
+///
+/// Changes only occur through this so. Should work.
 fn input_handler(
     events: &mut [Event],
     camera: &mut Camera,
     centre: &mut Vec3,
     magnification: &mut f32,
-) {
+) -> bool {
+    let mut dirty = false;
+
     // rotate the camera around the graph on drag
     for event in events {
         const DRAG_MULTIPLIER: f32 = 0.005;
@@ -67,6 +72,7 @@ fn input_handler(
 
             // prevent other event handlers from using this event again
             *handled = true;
+            dirty = true;
         }
 
         if let Event::MouseWheel { delta, handled, .. } = event {
@@ -82,9 +88,9 @@ fn input_handler(
             }
 
             *handled = true;
+            dirty = true;
         }
 
-        // demo
         if let Event::KeyPress {
             kind: k @ (Key::X | Key::Y | Key::Z),
             modifiers,
@@ -108,8 +114,11 @@ fn input_handler(
             dbg!(&centre, &magnification);
 
             *handled = true;
+            dirty = true;
         }
     }
+
+    dirty
 }
 
 /// Entry point?
@@ -145,11 +154,15 @@ pub fn main() -> Result<()> {
     // NOTE: the centre (or more like offset) is stored in grid squares!
     let mut centre = Vec3::zero();
     let mut magnification = 1.0;
+    let mut grid_gm = Gm::new(
+        grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
+        ColorMaterial::default(),
+    );
 
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
-        input_handler(
+        let dirty = input_handler(
             &mut frame_input.events,
             &mut camera,
             &mut centre,
@@ -158,17 +171,19 @@ pub fn main() -> Result<()> {
 
         magnification = magnification.clamp(0.001, 1000.0);
 
-        let gm = Gm::new(
-            grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
-            ColorMaterial::default(),
-        );
+        if dirty {
+            grid_gm = Gm::new(
+                grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
+                ColorMaterial::default(),
+            );
+        }
 
         let (r, g, b) = palette::BACKGROUND;
 
         frame_input
             .screen()
             .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
-            .render(&camera, [&gm], &[]);
+            .render(&camera, [&grid_gm], &[]);
 
         FrameOutput::default()
     });

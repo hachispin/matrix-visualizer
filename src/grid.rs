@@ -105,7 +105,7 @@ pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
 
     let num_positions = positions.len();
 
-    let cpu_mesh = CpuMesh {
+    let gridlines = CpuMesh {
         positions: Positions::F32(positions),
         indices: Indices::U32(indices),
         colors: Some(vec![palette::GRID; num_positions]),
@@ -120,7 +120,7 @@ pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
     y_axis.transform(Mat4::from_angle_z(degrees(90.0)))?;
     z_axis.transform(Mat4::from_angle_y(degrees(-90.0)))?;
 
-    let cpu_mesh = [cpu_mesh, x_axis, z_axis, y_axis]
+    let cpu_mesh = [gridlines, /* labels, */ x_axis, z_axis, y_axis]
         .into_iter()
         .try_fold(CpuMesh::default(), utils::merge_meshes)?;
 
