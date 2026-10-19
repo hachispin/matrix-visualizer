@@ -115,14 +115,16 @@ fn input_handler(
                 continue;
             }
 
-            let offset = if modifiers.shift { -1.0 } else { 1.0 };
+            let step = grid::interval(zoom_magnification(*zoom_steps));
+            let offset = if modifiers.shift { -step } else { step };
 
-            match k {
-                Key::X => centre.x += offset,
-                Key::Y => centre.y += offset,
-                Key::Z => centre.z += offset,
+            let coordinate = match k {
+                Key::X => &mut centre.x,
+                Key::Y => &mut centre.y,
+                Key::Z => &mut centre.z,
                 _ => unreachable!(),
-            }
+            };
+            *coordinate = ((*coordinate + offset) / step).round() * step;
 
             dbg!(&centre, zoom_magnification(*zoom_steps));
 
@@ -164,7 +166,7 @@ pub fn main() -> Result<()> {
         100.0,
     );
 
-    // NOTE: The centre (or more like offset) is stored in grid squares!
+    // The centre is stored in graph coordinates.
     let mut centre = Vec3::zero();
     let mut zoom_steps = 0;
     let magnification = zoom_magnification(zoom_steps);
