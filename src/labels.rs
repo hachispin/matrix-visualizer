@@ -30,8 +30,10 @@ use three_d::{
 use crate::{grid, palette};
 
 const FONT_SIZE: f32 = 64.0;
-const TEXT_HEIGHT: f32 = 0.3;
+const NUMBER_TEXT_HEIGHT: f32 = 0.2;
+const AXIS_TEXT_HEIGHT: f32 = 0.3;
 const AXIS_GAP: f32 = 0.18;
+const NUMBER_GAP: f32 = 0.08;
 // Lift the XY textures just enough to avoid fighting with the grid's depth.
 const PLANE_HEIGHT: f32 = 0.02;
 
@@ -43,6 +45,7 @@ struct VerticalLabel {
 
 pub struct Labels {
     font: Font,
+    number_font: Font,
     plane: Vec<Gm<Mesh, ColorMaterial>>,
     vertical: Vec<VerticalLabel>,
     centre: Vec3,
@@ -53,13 +56,19 @@ pub struct Labels {
 impl Labels {
     pub fn new(ctx: &Context, centre: Vec3, magnification: f32) -> Result<Self> {
         let font = Font::from_bytes(
-            include_bytes!("../assets/IBMPlexSans-Regular.ttf") as &[u8],
+            include_bytes!("../assets/IBMPlexSans-Bold.ttf") as &[u8],
+            FontSettings::default(),
+        )
+        .map_err(|e| anyhow!("{e}"))?;
+        let number_font = Font::from_bytes(
+            include_bytes!("../assets/IBMPlexSans-SemiBold.ttf") as &[u8],
             FontSettings::default(),
         )
         .map_err(|e| anyhow!("{e}"))?;
 
         let mut labels = Self {
             font,
+            number_font,
             plane: Vec::new(),
             vertical: Vec::new(),
             centre,
@@ -116,6 +125,8 @@ impl Labels {
         let step = grid::interval(self.magnification);
         let spacing = step * self.magnification;
         let limit = (grid::GRID_SIZE / spacing).floor() as i32;
+        let mut horizontal = Vec::new();
+        let mut max_width = 0.0_f32;
 
         for tick in -limit..=limit {
             // Don't add labels at origin.
@@ -127,28 +138,58 @@ impl Labels {
             let value = tick as f32 * step;
             let values = vec3(value, value, value) + self.centre;
 
-            self.add_plane_label(
+            let (mut object, half_width) = text_gm(
                 ctx,
+                &self.number_font,
                 &format_value(values.x, step),
-                vec3(position, -0.3, PLANE_HEIGHT),
-                false,
+                NUMBER_TEXT_HEIGHT,
             )?;
+            object.set_transformation(Mat4::from_translation(vec3(position, -0.3, PLANE_HEIGHT)));
+            max_width = max_width.max(2.0 * half_width);
+            horizontal.push((tick, object));
 
             self.add_plane_label(
                 ctx,
                 &format_value(values.y, step),
                 vec3(0.0, position, PLANE_HEIGHT),
                 true,
+                NUMBER_TEXT_HEIGHT,
             )?;
 
-            self.add_vertical_label(ctx, &format_value(values.z, step), position)?;
+            self.add_vertical_label(
+                ctx,
+                &format_value(values.z, step),
+                position,
+                NUMBER_TEXT_HEIGHT,
+            )?;
         }
+
+        // Leave room for the widest X label, keeping the chosen ticks symmetric about zero.
+        let stride = ((max_width + NUMBER_GAP) / spacing).ceil().max(1.0) as i32;
+        self.plane.extend(
+            horizontal
+                .into_iter()
+                .filter(|(tick, _)| tick % stride == 0)
+                .map(|(_, object)| object),
+        );
 
         let end = grid::GRID_SIZE + 0.4;
 
-        self.add_plane_label(ctx, "x", vec3(end, 0.0, PLANE_HEIGHT), false)?;
-        self.add_plane_label(ctx, "y", vec3(0.0, end, PLANE_HEIGHT), false)?;
-        self.add_vertical_label(ctx, "z", end)?;
+        self.add_plane_label(
+            ctx,
+            "x",
+            vec3(end, 0.0, PLANE_HEIGHT),
+            false,
+            AXIS_TEXT_HEIGHT,
+        )?;
+        self.add_plane_label(
+            ctx,
+            "y",
+            vec3(0.0, end, PLANE_HEIGHT),
+            false,
+            AXIS_TEXT_HEIGHT,
+        )?;
+        self.add_vertical_label(ctx, "z", end, AXIS_TEXT_HEIGHT)?;
 
         Ok(())
     }
@@ -159,8 +200,9 @@ impl Labels {
         text: &str,
         mut position: Vec3,
         align_right: bool,
+        text_height: f32,
     ) -> Result<()> {
-        let (mut object, half_width) = text_gm(ctx, &self.font, text)?;
+        let (mut object, half_width) = text_gm(ctx, self.label_font(text), text, text_height)?;
 
         if align_right {
             position.x -= AXIS_GAP + half_width;
@@ -172,8 +214,14 @@ impl Labels {
         Ok(())
     }
 
-    fn add_vertical_label(&mut self, ctx: &Context, text: &str, height: f32) -> Result<()> {
-        let (object, half_width) = text_gm(ctx, &self.font, text)?;
+    fn add_vertical_label(
+        &mut self,
+        ctx: &Context,
+        text: &str,
+        height: f32,
+        text_height: f32,
+    ) -> Result<()> {
+        let (object, half_width) = text_gm(ctx, self.label_font(text), text, text_height)?;
 
         self.vertical.push(VerticalLabel {
             object,
@@ -182,6 +230,14 @@ impl Labels {
         });
 
         Ok(())
+    }
+
+    fn label_font(&self, text: &str) -> &Font {
+        if text.bytes().any(|byte| byte.is_ascii_digit()) {
+            &self.number_font
+        } else {
+            &self.font
+        }
     }
 }
 
@@ -267,7 +323,12 @@ fn rasterize_text(font: &Font, text: &str) -> (usize, usize, Vec<u8>) {
     (width, height, pixels)
 }
 
-fn text_gm(ctx: &Context, font: &Font, text: &str) -> Result<(Gm<Mesh, ColorMaterial>, f32)> {
+fn text_gm(
+    ctx: &Context,
+    font: &Font,
+    text: &str,
+    text_height: f32,
+) -> Result<(Gm<Mesh, ColorMaterial>, f32)> {
     let (width, height, pixels) = rasterize_text(font, text);
 
     let texture = CpuTexture {
@@ -291,8 +352,8 @@ fn text_gm(ctx: &Context, font: &Font, text: &str) -> Result<(Gm<Mesh, ColorMate
         },
     );
 
-    let half_width = width as f32 * TEXT_HEIGHT / FONT_SIZE / 2.0;
-    let half_height = height as f32 * TEXT_HEIGHT / FONT_SIZE / 2.0;
+    let half_width = width as f32 * text_height / FONT_SIZE / 2.0;
+    let half_height = height as f32 * text_height / FONT_SIZE / 2.0;
 
     let mut mesh = CpuMesh::square();
     mesh.transform(Mat4::from_nonuniform_scale(half_width, half_height, 1.0))?;
