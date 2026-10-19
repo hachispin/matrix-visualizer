@@ -153,9 +153,10 @@ pub fn main() -> Result<()> {
         100.0,
     );
 
-    // NOTE: the centre (or more like offset) is stored in grid squares!
+    // NOTE: The centre (or more like offset) is stored in grid squares!
     let mut centre = Vec3::zero();
     let mut magnification = 1.0;
+
     let mut grid_gm = Gm::new(
         grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
         ColorMaterial::default(),
@@ -174,6 +175,7 @@ pub fn main() -> Result<()> {
         );
 
         magnification = magnification.clamp(0.001, 1000.0);
+
         grid_labels
             .update(&ctx, &camera, centre, magnification)
             .expect("Failed to update grid labels!");

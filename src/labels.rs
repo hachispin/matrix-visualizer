@@ -56,7 +56,7 @@ impl Labels {
             include_bytes!("../assets/IBMPlexSans-Regular.ttf") as &[u8],
             FontSettings::default(),
         )
-        .map_err(|error| anyhow!("{error}"))?;
+        .map_err(|e| anyhow!("{e}"))?;
 
         let mut labels = Self {
             font,
@@ -66,7 +66,9 @@ impl Labels {
             magnification,
             facing: Mat4::from_angle_x(degrees(90.0)),
         };
+
         labels.rebuild(ctx)?;
+
         Ok(labels)
     }
 
@@ -84,10 +86,10 @@ impl Labels {
             self.rebuild(ctx)?;
         }
 
-        // Retain the previous heading at the poles, where azimuth is undefined.
         if let Some(facing) = cylindrical_facing(camera.position()) {
             self.facing = facing;
         }
+
         for label in &mut self.vertical {
             label.object.set_transformation(
                 Mat4::from_translation(vec3(0.0, 0.0, label.height))
@@ -95,6 +97,7 @@ impl Labels {
                     * Mat4::from_translation(vec3(AXIS_GAP + label.half_width, 0.0, 0.0)),
             );
         }
+
         Ok(())
     }
 
@@ -115,31 +118,37 @@ impl Labels {
         let step = spacing / self.magnification;
 
         for tick in -limit..=limit {
-            // Leave room where all three axes meet.
+            // Don't add labels at origin.
             if tick == 0 {
                 continue;
             }
+
             let position = tick as f32 * spacing;
             let values = vec3(position, position, position) / self.magnification + self.centre;
+
             self.add_plane_label(
                 ctx,
                 &format_value(values.x, step),
                 vec3(position, -0.3, PLANE_HEIGHT),
                 false,
             )?;
+
             self.add_plane_label(
                 ctx,
                 &format_value(values.y, step),
                 vec3(0.0, position, PLANE_HEIGHT),
                 true,
             )?;
+
             self.add_vertical_label(ctx, &format_value(values.z, step), position)?;
         }
 
         let end = grid::GRID_SIZE + 0.4;
+
         self.add_plane_label(ctx, "x", vec3(end, 0.0, PLANE_HEIGHT), false)?;
         self.add_plane_label(ctx, "y", vec3(0.0, end, PLANE_HEIGHT), false)?;
         self.add_vertical_label(ctx, "z", end)?;
+
         Ok(())
     }
 
@@ -151,21 +160,26 @@ impl Labels {
         align_right: bool,
     ) -> Result<()> {
         let (mut object, half_width) = text_gm(ctx, &self.font, text)?;
+
         if align_right {
             position.x -= AXIS_GAP + half_width;
         }
+
         object.set_transformation(Mat4::from_translation(position));
         self.plane.push(object);
+
         Ok(())
     }
 
     fn add_vertical_label(&mut self, ctx: &Context, text: &str, height: f32) -> Result<()> {
         let (object, half_width) = text_gm(ctx, &self.font, text)?;
+
         self.vertical.push(VerticalLabel {
             object,
             height,
             half_width,
         });
+
         Ok(())
     }
 }
@@ -173,11 +187,14 @@ impl Labels {
 /// Local text Y remains world Z. Only the horizontal normal follows the camera.
 fn cylindrical_facing(camera_position: Vec3) -> Option<Mat4> {
     let horizontal = vec3(camera_position.x, camera_position.y, 0.0);
+
     if horizontal.magnitude2() < 1.0e-8 {
         return None;
     }
+
     let normal = horizontal.normalize();
     let right = Vec3::unit_z().cross(normal);
+
     Some(Mat4::from_cols(
         right.extend(0.0),
         Vec3::unit_z().extend(0.0),
@@ -189,11 +206,13 @@ fn cylindrical_facing(camera_position: Vec3) -> Option<Mat4> {
 fn format_value(value: f32, step: f32) -> String {
     let precision = (1.0 - step.log10().floor()).clamp(0.0, 6.0) as usize;
     let text = format!("{value:.precision$}");
+
     let text = if text.contains('.') {
         text.trim_end_matches('0').trim_end_matches('.')
     } else {
         &text
     };
+
     if text == "-0" {
         "0".to_owned()
     } else {
@@ -211,18 +230,22 @@ fn rasterize_text(font: &Font, text: &str) -> (usize, usize, Vec<u8>) {
         .iter()
         .filter(|g| g.width > 0 && g.height > 0)
         .collect();
+
     let left = glyphs.iter().map(|g| g.x.floor() as i32).min().unwrap_or(0);
     let top = glyphs.iter().map(|g| g.y.floor() as i32).min().unwrap_or(0);
+
     let right = glyphs
         .iter()
         .map(|g| (g.x.floor() + g.width as f32) as i32)
         .max()
         .unwrap_or(left);
+
     let bottom = glyphs
         .iter()
         .map(|g| (g.y.floor() + g.height as f32) as i32)
         .max()
         .unwrap_or(top);
+
     let width = (right - left) as usize + 4;
     let height = (bottom - top) as usize + 4;
     let mut pixels = vec![0; width * height];
@@ -231,6 +254,7 @@ fn rasterize_text(font: &Font, text: &str) -> (usize, usize, Vec<u8>) {
         let (_, bitmap) = font.rasterize_config(glyph.key);
         let x = (glyph.x.floor() as i32 - left) as usize + 2;
         let y = (glyph.y.floor() as i32 - top) as usize + 2;
+
         for row in 0..glyph.height {
             for column in 0..glyph.width {
                 let pixel = &mut pixels[(y + row) * width + x + column];
@@ -238,11 +262,13 @@ fn rasterize_text(font: &Font, text: &str) -> (usize, usize, Vec<u8>) {
             }
         }
     }
+
     (width, height, pixels)
 }
 
 fn text_gm(ctx: &Context, font: &Font, text: &str) -> Result<(Gm<Mesh, ColorMaterial>, f32)> {
     let (width, height, pixels) = rasterize_text(font, text);
+
     let texture = CpuTexture {
         width: u32::try_from(width)?,
         height: u32::try_from(height)?,
@@ -254,6 +280,7 @@ fn text_gm(ctx: &Context, font: &Font, text: &str) -> Result<(Gm<Mesh, ColorMate
         ),
         ..Default::default()
     };
+
     let material = ColorMaterial::new_transparent(
         ctx,
         &CpuMaterial {
@@ -265,7 +292,9 @@ fn text_gm(ctx: &Context, font: &Font, text: &str) -> Result<(Gm<Mesh, ColorMate
 
     let half_width = width as f32 * TEXT_HEIGHT / FONT_SIZE / 2.0;
     let half_height = height as f32 * TEXT_HEIGHT / FONT_SIZE / 2.0;
+
     let mut mesh = CpuMesh::square();
     mesh.transform(Mat4::from_nonuniform_scale(half_width, half_height, 1.0))?;
+
     Ok((Gm::new(Mesh::new(ctx, &mesh), material), half_width))
 }
