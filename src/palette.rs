@@ -10,7 +10,6 @@ pub const BACKGROUND: (f32, f32, f32) = (0.972_549, 0.980_392_16, 0.988_235_3);
 pub const GRID: Srgba = Srgba::new_opaque(0xBB, 0xC9, 0xD8);
 pub const AXES: Srgba = Srgba::new_opaque(0x47, 0x55, 0x69);
 
-#[expect(unused)]
 pub const LABELS: Srgba = Srgba::new_opaque(0x33, 0x41, 0x55);
 
 /// Possible colours that shapes can have.

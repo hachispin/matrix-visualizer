@@ -6,7 +6,7 @@ use three_d::{Context, CpuMesh, Indices, Mesh, Positions, prelude::*};
 use crate::{palette, utils};
 
 /// The cubic grid extends out `GRID_SIZE` world units from its origin in all six directions.
-const GRID_SIZE: f32 = 5.0;
+pub(crate) const GRID_SIZE: f32 = 5.0;
 /// Width of grid lines.
 const LINE_WIDTH: f32 = 0.05;
 
@@ -26,7 +26,7 @@ fn draw_axis_arrow() -> Result<CpuMesh> {
 }
 
 /// Keeps gridline spacing between 1 and 2 in world space.
-fn adjust_magnification(magnification: f32) -> f32 {
+pub(crate) fn adjust_magnification(magnification: f32) -> f32 {
     // TODO: Perhaps use "nicer" intervals, e.g., {…, 0.1, 0.2, 0.5, 1, 2, 5, 10, …}.
 
     let mut magnification = magnification;
@@ -120,7 +120,7 @@ pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
     y_axis.transform(Mat4::from_angle_z(degrees(90.0)))?;
     z_axis.transform(Mat4::from_angle_y(degrees(-90.0)))?;
 
-    let cpu_mesh = [gridlines, /* labels, */ x_axis, z_axis, y_axis]
+    let cpu_mesh = [gridlines, x_axis, z_axis, y_axis]
         .into_iter()
         .try_fold(CpuMesh::default(), utils::merge_meshes)?;
 

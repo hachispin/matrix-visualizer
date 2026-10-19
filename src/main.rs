@@ -17,6 +17,7 @@
 )]
 
 mod grid;
+mod labels;
 mod palette;
 mod shapes;
 mod utils;
@@ -31,6 +32,7 @@ use three_d::{
     Gm,
     Key,
     MouseButton,
+    Object,
     Window,
     WindowSettings,
     prelude::*,
@@ -159,6 +161,8 @@ pub fn main() -> Result<()> {
         ColorMaterial::default(),
     );
 
+    let mut grid_labels = labels::Labels::new(&ctx, centre, magnification)?;
+
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
@@ -170,6 +174,9 @@ pub fn main() -> Result<()> {
         );
 
         magnification = magnification.clamp(0.001, 1000.0);
+        grid_labels
+            .update(&ctx, &camera, centre, magnification)
+            .expect("Failed to update grid labels!");
 
         if dirty {
             grid_gm = Gm::new(
@@ -183,7 +190,11 @@ pub fn main() -> Result<()> {
         frame_input
             .screen()
             .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
-            .render(&camera, [&grid_gm], &[]);
+            .render(
+                &camera,
+                std::iter::once(&grid_gm as &dyn Object).chain(grid_labels.objects()),
+                &[],
+            );
 
         FrameOutput::default()
     });
