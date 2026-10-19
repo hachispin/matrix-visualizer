@@ -27,10 +27,12 @@ use three_d::{
     Camera,
     ClearState,
     ColorMaterial,
+    CpuMesh,
     Event,
     FrameOutput,
     Gm,
     Key,
+    Mesh,
     MouseButton,
     Object,
     Window,
@@ -93,6 +95,12 @@ fn input_handler(
             }
 
             *handled = true;
+            dirty = true;
+        }
+
+        // Text input also catches tilde on layouts where it is not on the grave key.
+        if matches!(event, Event::Text(text) if text == "~") {
+            *centre = Vec3::zero();
             dirty = true;
         }
 
@@ -168,6 +176,15 @@ pub fn main() -> Result<()> {
 
     let mut grid_labels = labels::Labels::new(&ctx, centre, magnification)?;
 
+    let origin_radius = 0.1;
+    let mut origin_marker = Gm::new(
+        Mesh::new(&ctx, &CpuMesh::sphere(16)),
+        ColorMaterial {
+            color: palette::AXES,
+            ..Default::default()
+        },
+    );
+
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
@@ -179,6 +196,15 @@ pub fn main() -> Result<()> {
         );
 
         let magnification = zoom_magnification(zoom_steps);
+
+        // Follow the graph origin, keeping the marker's world size constant at every zoom.
+        let origin_position = -centre * magnification;
+        origin_marker.set_transformation(
+            Mat4::from_translation(origin_position) * Mat4::from_scale(origin_radius),
+        );
+        let origin_visible = [origin_position.x, origin_position.y, origin_position.z]
+            .into_iter()
+            .all(|coordinate| coordinate.abs() + origin_radius <= grid::GRID_SIZE);
 
         grid_labels
             .update(&ctx, &camera, centre, magnification)
@@ -198,7 +224,9 @@ pub fn main() -> Result<()> {
             .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
             .render(
                 &camera,
-                std::iter::once(&grid_gm as &dyn Object).chain(grid_labels.objects()),
+                std::iter::once(&grid_gm as &dyn Object)
+                    .chain(origin_visible.then_some(&origin_marker as &dyn Object))
+                    .chain(grid_labels.objects()),
                 &[],
             );
 
