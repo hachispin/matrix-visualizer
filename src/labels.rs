@@ -113,9 +113,9 @@ impl Labels {
         self.plane.clear();
         self.vertical.clear();
 
-        let spacing = grid::adjust_magnification(self.magnification);
+        let step = grid::interval(self.magnification);
+        let spacing = step * self.magnification;
         let limit = (grid::GRID_SIZE / spacing).floor() as i32;
-        let step = spacing / self.magnification;
 
         for tick in -limit..=limit {
             // Don't add labels at origin.
@@ -124,7 +124,8 @@ impl Labels {
             }
 
             let position = tick as f32 * spacing;
-            let values = vec3(position, position, position) / self.magnification + self.centre;
+            let value = tick as f32 * step;
+            let values = vec3(value, value, value) + self.centre;
 
             self.add_plane_label(
                 ctx,

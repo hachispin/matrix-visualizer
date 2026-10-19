@@ -25,21 +25,22 @@ fn draw_axis_arrow() -> Result<CpuMesh> {
     Ok(arrow)
 }
 
-/// Keeps gridline spacing between 1 and 2 in world space.
-pub(crate) fn adjust_magnification(magnification: f32) -> f32 {
-    // TODO: Perhaps use "nicer" intervals, e.g., {…, 0.1, 0.2, 0.5, 1, 2, 5, 10, …}.
+/// Largest 1–2–5 graph interval that fits within one world unit at this zoom.
+/// This keeps gridline spacing between 0.4 and 1 world units.
+pub(crate) fn interval(magnification: f32) -> f32 {
+    let target = magnification.recip();
+    let decade = 10.0_f32.powf(target.log10().floor());
+    let fraction = target / decade;
 
-    let mut magnification = magnification;
+    let factor = if fraction >= 5.0 {
+        5.0
+    } else if fraction >= 2.0 {
+        2.0
+    } else {
+        1.0
+    };
 
-    while magnification < 0.5 {
-        magnification *= 2.0;
-    }
-
-    while magnification > 1.0 {
-        magnification /= 2.0;
-    }
-
-    magnification
+    factor * decade
 }
 
 /// Draws the grid mesh. Should only be called if needed as this draws on every call.
@@ -47,7 +48,7 @@ pub(crate) fn adjust_magnification(magnification: f32) -> f32 {
 /// This doesn't need to know what the centre is. The grid stays the same regardless. Think of it
 /// like this: the grid is not moved through the graph - the graph is being moved through the grid.
 pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
-    let magnification = adjust_magnification(magnification);
+    let spacing = interval(magnification) * magnification;
 
     // draw x-y grid
     //
@@ -64,29 +65,18 @@ pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
         reason = "iterating over a float range is annoying"
     )]
     let (start, end) = (
-        (-GRID_SIZE / magnification).ceil() as i32,
-        (GRID_SIZE / magnification).floor() as i32,
+        (-GRID_SIZE / spacing).ceil() as i32,
+        (GRID_SIZE / spacing).floor() as i32,
     );
 
-    // this works out. to understand why take the case of 0.5x magnification.
-    // the range doubles but each value `c` from the range is halved. so it
-    // still ends up being inside the grid while just having more lines. we
-    // basically just get a larger range and squish it to the same length.
-    //
-    // | magnification | range    | interpolated
-    // | 0.5           | -10..=10 | -5, -4.5, …, 5
-    // | 1             | -5..=5   | -5, -4, …, 5
-    // | 2             | -2..=2   | -4, -2, …, 4
-    //
-    // this implementation avoids the sort of accumulated FPA precision loss (which would
-    // happen in the trivial approach of just incrementing `c` by `spacing` until `GRID_SIZE`).
+    // Multiply integer tick indices by the spacing to avoid accumulating floating-point error.
 
     for c in start..=end {
         #[expect(
             clippy::cast_precision_loss,
             reason = "magnification is clamped in main"
         )]
-        let c = c as f32 * magnification;
+        let c = c as f32 * spacing;
 
         // to not overlap with axes
         if c == 0.0 {

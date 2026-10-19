@@ -38,6 +38,9 @@ use three_d::{
     prelude::*,
 };
 
+/// Recompute from integer wheel steps so zooming back never accumulates rounding error.
+fn zoom_magnification(steps: i32) -> f32 { 1.1_f32.powi(steps).clamp(0.001, 1000.0) }
+
 /// Returns a boolean indicating if the grid is to be redrawn.
 ///
 /// Changes only occur through this so. Should work.
@@ -45,14 +48,13 @@ fn input_handler(
     events: &mut [Event],
     camera: &mut Camera,
     centre: &mut Vec3,
-    magnification: &mut f32,
+    zoom_steps: &mut i32,
 ) -> bool {
     let mut dirty = false;
 
     // rotate the camera around the graph on drag
     for event in events {
         const DRAG_MULTIPLIER: f32 = 0.005;
-        const ZOOM_FACTOR: f32 = 1.1;
 
         // pattern match this event
         if let Event::MouseMotion {
@@ -83,10 +85,11 @@ fn input_handler(
             }
 
             // vertical scroll amount (positive = up)
-            if delta.1 > 0.0 {
-                *magnification *= ZOOM_FACTOR;
-            } else if delta.1 < 0.0 {
-                *magnification /= ZOOM_FACTOR;
+            // Bound the step count too, so scrolling at a limit does not build up overscroll.
+            if delta.1 > 0.0 && zoom_magnification(*zoom_steps) < 1000.0 {
+                *zoom_steps += 1;
+            } else if delta.1 < 0.0 && zoom_magnification(*zoom_steps) > 0.001 {
+                *zoom_steps -= 1;
             }
 
             *handled = true;
@@ -113,7 +116,7 @@ fn input_handler(
                 _ => unreachable!(),
             }
 
-            dbg!(&centre, &magnification);
+            dbg!(&centre, zoom_magnification(*zoom_steps));
 
             *handled = true;
             dirty = true;
@@ -155,7 +158,8 @@ pub fn main() -> Result<()> {
 
     // NOTE: The centre (or more like offset) is stored in grid squares!
     let mut centre = Vec3::zero();
-    let mut magnification = 1.0;
+    let mut zoom_steps = 0;
+    let magnification = zoom_magnification(zoom_steps);
 
     let mut grid_gm = Gm::new(
         grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
@@ -171,10 +175,10 @@ pub fn main() -> Result<()> {
             &mut frame_input.events,
             &mut camera,
             &mut centre,
-            &mut magnification,
+            &mut zoom_steps,
         );
 
-        magnification = magnification.clamp(0.001, 1000.0);
+        let magnification = zoom_magnification(zoom_steps);
 
         grid_labels
             .update(&ctx, &camera, centre, magnification)
