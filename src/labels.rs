@@ -1,10 +1,10 @@
-//! Textured grid labels, with cylindrical billboards for the vertical axis.
+//! Labels for the graph.
 
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    reason = "Raster dimensions and bounded grid coordinates fit in these types"
+    reason = "Unlikely to occur"
 )]
 
 use anyhow::{Result, anyhow};
@@ -34,7 +34,7 @@ const NUMBER_TEXT_HEIGHT: f32 = 0.2;
 const AXIS_TEXT_HEIGHT: f32 = 0.3;
 const AXIS_GAP: f32 = 0.18;
 const NUMBER_GAP: f32 = 0.08;
-// Lift the XY textures just enough to avoid fighting with the grid's depth.
+// prevent z-fighting
 const PLANE_HEIGHT: f32 = 0.02;
 
 struct VerticalLabel {
@@ -48,8 +48,6 @@ pub struct Labels {
     number_font: Font,
     plane: Vec<Gm<Mesh, ColorMaterial>>,
     vertical: Vec<VerticalLabel>,
-    centre: Vec3,
-    magnification: f32,
     facing: Mat4,
 }
 
@@ -60,6 +58,7 @@ impl Labels {
             FontSettings::default(),
         )
         .map_err(|e| anyhow!("{e}"))?;
+
         let number_font = Font::from_bytes(
             include_bytes!("../assets/IBMPlexSans-SemiBold.ttf") as &[u8],
             FontSettings::default(),
@@ -71,30 +70,16 @@ impl Labels {
             number_font,
             plane: Vec::new(),
             vertical: Vec::new(),
-            centre,
-            magnification,
             facing: Mat4::from_angle_x(degrees(90.0)),
         };
 
-        labels.rebuild(ctx)?;
+        labels.rebuild(ctx, centre, magnification)?;
 
         Ok(labels)
     }
 
-    /// Rebuild text only when its values change; camera motion only changes Z transforms.
-    pub fn update(
-        &mut self,
-        ctx: &Context,
-        camera: &Camera,
-        centre: Vec3,
-        magnification: f32,
-    ) -> Result<()> {
-        if self.centre != centre || self.magnification.to_bits() != magnification.to_bits() {
-            self.centre = centre;
-            self.magnification = magnification;
-            self.rebuild(ctx)?;
-        }
-
+    /// Make z labels face the camera cylindrically.
+    pub fn face_camera(&mut self, camera: &Camera) {
         if let Some(facing) = cylindrical_facing(camera.position()) {
             self.facing = facing;
         }
@@ -106,8 +91,6 @@ impl Labels {
                     * Mat4::from_translation(vec3(AXIS_GAP + label.half_width, 0.0, 0.0)),
             );
         }
-
-        Ok(())
     }
 
     pub fn objects(&self) -> impl Iterator<Item = &dyn Object> {
@@ -118,12 +101,13 @@ impl Labels {
         )
     }
 
-    fn rebuild(&mut self, ctx: &Context) -> Result<()> {
+    /// Rebuild unconditionally; the caller decides when graph state has changed.
+    pub fn rebuild(&mut self, ctx: &Context, centre: Vec3, magnification: f32) -> Result<()> {
         self.plane.clear();
         self.vertical.clear();
 
-        let step = grid::interval(self.magnification);
-        let spacing = step * self.magnification;
+        let step = grid::interval(magnification);
+        let spacing = step * magnification;
         let limit = (grid::GRID_SIZE / spacing).floor() as i32;
         let mut horizontal = Vec::new();
         let mut max_width = 0.0_f32;
@@ -136,7 +120,7 @@ impl Labels {
 
             let position = tick as f32 * spacing;
             let value = tick as f32 * step;
-            let values = vec3(value, value, value) + self.centre;
+            let values = vec3(value, value, value) + centre;
 
             let (mut object, half_width) = text_gm(
                 ctx,
@@ -281,7 +265,6 @@ fn rasterize_text(font: &Font, text: &str) -> (usize, usize, Vec<u8>) {
     let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
     layout.append(&[font], &TextStyle::new(text, FONT_SIZE, 0));
 
-    // Crop to the ink bounds so leading ascent space does not offset the label.
     let glyphs: Vec<_> = layout
         .glyphs()
         .iter()

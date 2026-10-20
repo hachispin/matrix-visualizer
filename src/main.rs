@@ -40,20 +40,16 @@ use three_d::{
     prelude::*,
 };
 
-/// Recompute from integer wheel steps so zooming back never accumulates rounding error.
+use crate::labels::Labels;
+
 fn zoom_magnification(steps: i32) -> f32 { 1.1_f32.powi(steps).clamp(0.001, 1000.0) }
 
-/// Returns a boolean indicating if the grid is to be redrawn.
-///
-/// Changes only occur through this so. Should work.
 fn input_handler(
     events: &mut [Event],
     camera: &mut Camera,
     centre: &mut Vec3,
     zoom_steps: &mut i32,
-) -> bool {
-    let mut dirty = false;
-
+) {
     // rotate the camera around the graph on drag
     for event in events {
         const DRAG_MULTIPLIER: f32 = 0.005;
@@ -78,7 +74,6 @@ fn input_handler(
 
             // prevent other event handlers from using this event again
             *handled = true;
-            dirty = true;
         }
 
         if let Event::MouseWheel { delta, handled, .. } = event {
@@ -87,7 +82,7 @@ fn input_handler(
             }
 
             // vertical scroll amount (positive = up)
-            // Bound the step count too, so scrolling at a limit does not build up overscroll.
+            // don't change zoom steps if already at bounds
             if delta.1 > 0.0 && zoom_magnification(*zoom_steps) < 1000.0 {
                 *zoom_steps += 1;
             } else if delta.1 < 0.0 && zoom_magnification(*zoom_steps) > 0.001 {
@@ -95,13 +90,10 @@ fn input_handler(
             }
 
             *handled = true;
-            dirty = true;
         }
 
-        // Text input also catches tilde on layouts where it is not on the grave key.
         if matches!(event, Event::Text(text) if text == "~") {
             *centre = Vec3::zero();
-            dirty = true;
         }
 
         if let Event::KeyPress {
@@ -128,11 +120,8 @@ fn input_handler(
             *coordinate = ((*coordinate + offset) / step).round() * step;
 
             *handled = true;
-            dirty = true;
         }
     }
-
-    dirty
 }
 
 /// Entry point?
@@ -165,7 +154,7 @@ pub fn main() -> Result<()> {
         100.0,
     );
 
-    // The centre is stored in graph coordinates.
+    // stored in graph coordinates
     let mut centre = Vec3::zero();
     let mut zoom_steps = 0;
     let magnification = zoom_magnification(zoom_steps);
@@ -175,7 +164,8 @@ pub fn main() -> Result<()> {
         ColorMaterial::default(),
     );
 
-    let mut grid_labels = labels::Labels::new(&ctx, centre, magnification)?;
+    let mut grid_labels = Labels::new(&ctx, centre, magnification)?;
+    grid_labels.face_camera(&camera);
 
     let origin_radius = 0.1;
     let mut origin_marker = Gm::new(
@@ -185,11 +175,17 @@ pub fn main() -> Result<()> {
             ..Default::default()
         },
     );
+    origin_marker.set_transformation(Mat4::from_scale(origin_radius));
+    let mut origin_visible = true;
 
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
-        let dirty = input_handler(
+        let prev_zoom_steps = zoom_steps;
+        let prev_centre = centre;
+        let prev_camera_pos = camera.position();
+
+        input_handler(
             &mut frame_input.events,
             &mut camera,
             &mut centre,
@@ -197,25 +193,37 @@ pub fn main() -> Result<()> {
         );
 
         let magnification = zoom_magnification(zoom_steps);
+        let zoom_changed = zoom_steps != prev_zoom_steps;
+        let graph_changed = zoom_changed || centre != prev_centre;
+        let camera_pos = camera.position();
 
-        // Follow the graph origin, keeping the marker's world size constant at every zoom.
-        let origin_position = -centre * magnification;
-        origin_marker.set_transformation(
-            Mat4::from_translation(origin_position) * Mat4::from_scale(origin_radius),
-        );
-        let origin_visible = [origin_position.x, origin_position.y, origin_position.z]
-            .into_iter()
-            .all(|coordinate| coordinate.abs() + origin_radius <= grid::GRID_SIZE);
+        let heading_changed = camera_pos.y.atan2(camera_pos.x).to_bits()
+            != prev_camera_pos.y.atan2(prev_camera_pos.x).to_bits();
 
-        grid_labels
-            .update(&ctx, &camera, centre, magnification)
-            .expect("Failed to update grid labels!");
+        if graph_changed || heading_changed {
+            grid_labels.face_camera(&camera);
+        }
 
-        if dirty {
-            grid_gm = Gm::new(
-                grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!"),
-                ColorMaterial::default(),
+        if graph_changed {
+            grid_labels
+                .rebuild(&ctx, centre, magnification)
+                .expect("Failed to rebuild grid labels!");
+
+            let origin_position = -centre * magnification;
+
+            // keep marker size constant
+            origin_marker.set_transformation(
+                Mat4::from_translation(origin_position) * Mat4::from_scale(origin_radius),
             );
+
+            origin_visible = [origin_position.x, origin_position.y, origin_position.z]
+                .into_iter()
+                .all(|coordinate| coordinate.abs() + origin_radius <= grid::GRID_SIZE);
+        }
+
+        if zoom_changed {
+            grid_gm.geometry =
+                grid::mesh(&ctx, magnification).expect("Failed to construct grid mesh!");
         }
 
         let (r, g, b) = palette::BACKGROUND;
