@@ -20,6 +20,7 @@ mod grid;
 mod labels;
 mod palette;
 mod shapes;
+mod ui;
 mod utils;
 
 use std::iter;
@@ -32,6 +33,7 @@ use three_d::{
     CpuMesh,
     Event,
     FrameOutput,
+    GUI,
     Gm,
     Key,
     Mesh,
@@ -51,6 +53,8 @@ fn input_handler(
     camera: &mut Camera,
     centre: &mut Vec3,
     zoom_steps: &mut i32,
+    keyboard_captured: bool,
+    pointer_captured: bool,
 ) {
     // rotate the camera around the graph on drag
     for event in events {
@@ -64,7 +68,7 @@ fn input_handler(
             ..
         } = event
         {
-            if *handled {
+            if *handled || pointer_captured {
                 continue;
             }
 
@@ -79,7 +83,7 @@ fn input_handler(
         }
 
         if let Event::MouseWheel { delta, handled, .. } = event {
-            if *handled {
+            if *handled || pointer_captured {
                 continue;
             }
 
@@ -94,7 +98,7 @@ fn input_handler(
             *handled = true;
         }
 
-        if matches!(event, Event::Text(text) if text == "~") {
+        if !keyboard_captured && matches!(event, Event::Text(text) if text == "~") {
             *centre = Vec3::zero();
         }
 
@@ -142,6 +146,8 @@ pub fn main() -> Result<()> {
     })?;
 
     let ctx = window.gl();
+    let mut gui = GUI::new(&ctx);
+    let mut ui = ui::Ui::new(gui.context());
 
     // A "perspective" camera (as opposed to an orthographic one) is
     // often preferred as it's more natural to the eye. Though, for a
@@ -183,6 +189,14 @@ pub fn main() -> Result<()> {
     window.render_loop(move |mut frame_input| {
         camera.set_viewport(frame_input.viewport);
 
+        gui.update(
+            &mut frame_input.events,
+            frame_input.accumulated_time,
+            frame_input.viewport,
+            frame_input.device_pixel_ratio,
+            |root| ui.show(root),
+        );
+
         let prev_zoom_steps = zoom_steps;
         let prev_centre = centre;
         let prev_camera_pos = camera.position();
@@ -192,6 +206,8 @@ pub fn main() -> Result<()> {
             &mut camera,
             &mut centre,
             &mut zoom_steps,
+            gui.context().egui_wants_keyboard_input(),
+            gui.context().egui_wants_pointer_input(),
         );
 
         let magnification = zoom_magnification(zoom_steps);
@@ -239,7 +255,9 @@ pub fn main() -> Result<()> {
                     .chain(origin_visible.then_some(&origin_marker))
                     .chain(grid_labels.objects()),
                 &[],
-            );
+            )
+            .write(|| gui.render())
+            .expect("Failed to render UI!");
 
         FrameOutput::default()
     });
