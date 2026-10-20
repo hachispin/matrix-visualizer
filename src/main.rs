@@ -124,9 +124,8 @@ fn input_handler(
                 Key::Z => &mut centre.z,
                 _ => unreachable!(),
             };
-            *coordinate = ((*coordinate + offset) / step).round() * step;
 
-            dbg!(&centre, zoom_magnification(*zoom_steps));
+            *coordinate = ((*coordinate + offset) / step).round() * step;
 
             *handled = true;
             dirty = true;
