@@ -22,6 +22,8 @@ mod palette;
 mod shapes;
 mod utils;
 
+use std::iter;
+
 use anyhow::Result;
 use three_d::{
     Camera,
@@ -34,7 +36,6 @@ use three_d::{
     Key,
     Mesh,
     MouseButton,
-    Object,
     Window,
     WindowSettings,
     prelude::*,
@@ -42,6 +43,7 @@ use three_d::{
 
 use crate::labels::Labels;
 
+// this prevents drift (from repeatedly multiplying and dividing by 1.1)
 fn zoom_magnification(steps: i32) -> f32 { 1.1_f32.powi(steps).clamp(0.001, 1000.0) }
 
 fn input_handler(
@@ -218,7 +220,7 @@ pub fn main() -> Result<()> {
 
             origin_visible = [origin_position.x, origin_position.y, origin_position.z]
                 .into_iter()
-                .all(|coordinate| coordinate.abs() + origin_radius <= grid::GRID_SIZE);
+                .all(|coord| coord.abs() + origin_radius <= grid::GRID_SIZE);
         }
 
         if zoom_changed {
@@ -233,8 +235,8 @@ pub fn main() -> Result<()> {
             .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
             .render(
                 &camera,
-                std::iter::once(&grid_gm as &dyn Object)
-                    .chain(origin_visible.then_some(&origin_marker as &dyn Object))
+                iter::once(&grid_gm)
+                    .chain(origin_visible.then_some(&origin_marker))
                     .chain(grid_labels.objects()),
                 &[],
             );

@@ -22,7 +22,6 @@ use three_d::{
     CpuTexture,
     Gm,
     Mesh,
-    Object,
     TextureData,
     prelude::*,
 };
@@ -44,7 +43,7 @@ struct VerticalLabel {
 }
 
 pub struct Labels {
-    font: Font,
+    axis_font: Font,
     number_font: Font,
     plane: Vec<Gm<Mesh, ColorMaterial>>,
     vertical: Vec<VerticalLabel>,
@@ -53,7 +52,7 @@ pub struct Labels {
 
 impl Labels {
     pub fn new(ctx: &Context, centre: Vec3, magnification: f32) -> Result<Self> {
-        let font = Font::from_bytes(
+        let axis_font = Font::from_bytes(
             include_bytes!("../assets/IBMPlexSans-Bold.ttf") as &[u8],
             FontSettings::default(),
         )
@@ -66,7 +65,7 @@ impl Labels {
         .map_err(|e| anyhow!("{e}"))?;
 
         let mut labels = Self {
-            font,
+            axis_font,
             number_font,
             plane: Vec::new(),
             vertical: Vec::new(),
@@ -93,12 +92,10 @@ impl Labels {
         }
     }
 
-    pub fn objects(&self) -> impl Iterator<Item = &dyn Object> {
-        self.plane.iter().map(|object| object as &dyn Object).chain(
-            self.vertical
-                .iter()
-                .map(|label| &label.object as &dyn Object),
-        )
+    pub fn objects(&self) -> impl Iterator<Item = &Gm<Mesh, ColorMaterial>> {
+        self.plane
+            .iter()
+            .chain(self.vertical.iter().map(|label| &label.object))
     }
 
     /// Rebuild unconditionally; the caller decides when graph state has changed.
@@ -132,20 +129,22 @@ impl Labels {
             max_width = max_width.max(2.0 * half_width);
             horizontal.push((tick, object));
 
-            self.add_plane_label(
+            self.plane.push(Self::plane_label(
                 ctx,
+                &self.number_font,
                 &format_value(values.y, step),
                 vec3(0.0, position, PLANE_HEIGHT),
                 true,
                 NUMBER_TEXT_HEIGHT,
-            )?;
+            )?);
 
-            self.add_vertical_label(
+            self.vertical.push(Self::vertical_label(
                 ctx,
+                &self.number_font,
                 &format_value(values.z, step),
                 position,
                 NUMBER_TEXT_HEIGHT,
-            )?;
+            )?);
         }
 
         // Leave room for the widest X label, keeping the chosen ticks symmetric about zero.
@@ -159,69 +158,65 @@ impl Labels {
 
         let end = grid::GRID_SIZE + 0.4;
 
-        self.add_plane_label(
+        self.plane.push(Self::plane_label(
             ctx,
+            &self.axis_font,
             "x",
             vec3(end, 0.0, PLANE_HEIGHT),
             false,
             AXIS_TEXT_HEIGHT,
-        )?;
-        self.add_plane_label(
+        )?);
+        self.plane.push(Self::plane_label(
             ctx,
+            &self.axis_font,
             "y",
             vec3(0.0, end, PLANE_HEIGHT),
             false,
             AXIS_TEXT_HEIGHT,
-        )?;
-        self.add_vertical_label(ctx, "z", end, AXIS_TEXT_HEIGHT)?;
+        )?);
+        self.vertical.push(Self::vertical_label(
+            ctx,
+            &self.axis_font,
+            "z",
+            end,
+            AXIS_TEXT_HEIGHT,
+        )?);
 
         Ok(())
     }
 
-    fn add_plane_label(
-        &mut self,
+    fn plane_label(
         ctx: &Context,
+        font: &Font,
         text: &str,
         mut position: Vec3,
         align_right: bool,
         text_height: f32,
-    ) -> Result<()> {
-        let (mut object, half_width) = text_gm(ctx, self.label_font(text), text, text_height)?;
+    ) -> Result<Gm<Mesh, ColorMaterial>> {
+        let (mut object, half_width) = text_gm(ctx, font, text, text_height)?;
 
         if align_right {
             position.x -= AXIS_GAP + half_width;
         }
 
         object.set_transformation(Mat4::from_translation(position));
-        self.plane.push(object);
-
-        Ok(())
+        Ok(object)
     }
 
-    fn add_vertical_label(
-        &mut self,
+    fn vertical_label(
         ctx: &Context,
+        font: &Font,
         text: &str,
         height: f32,
         text_height: f32,
-    ) -> Result<()> {
-        let (object, half_width) = text_gm(ctx, self.label_font(text), text, text_height)?;
+    ) -> Result<VerticalLabel> {
+        let (object, half_width) = text_gm(ctx, font, text, text_height)?;
 
-        self.vertical.push(VerticalLabel {
+        Ok(VerticalLabel {
             object,
             height,
             half_width,
-        });
-
-        Ok(())
-    }
-
-    fn label_font(&self, text: &str) -> &Font {
-        if text.bytes().any(|byte| byte.is_ascii_digit()) {
-            &self.number_font
-        } else {
-            &self.font
-        }
+        })
     }
 }
 
