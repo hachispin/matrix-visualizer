@@ -2,7 +2,7 @@
 
 For visualizing matrices and transformations in both 2D and 3D.
 
-As of 20/10/2026, looks like this: [program](./showcase.png)
+As of 20/10/2026, looks like this: ![Screenshot of the program, showing the grid and sidebar](./showcase.png)
 
 <details>
 <summary>Checklist</summary>
