@@ -1,12 +1,5 @@
 //! Labels for the graph.
 
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    reason = "Unlikely to occur"
-)]
-
 use anyhow::{Result, anyhow};
 use fontdue::{
     Font,

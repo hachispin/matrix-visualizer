@@ -15,6 +15,12 @@
     clippy::enum_glob_use,
     reason = "when used, scope is restricted (e.g., inside functions)"
 )]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "many (valid) calculations trigger this, making it more noisy than helpful"
+)]
 
 mod grid;
 mod labels;

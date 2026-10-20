@@ -60,10 +60,6 @@ pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
     let mut positions = Vec::new();
     let mut indices = Vec::new();
 
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "iterating over a float range is annoying"
-    )]
     let (start, end) = (
         (-GRID_SIZE / spacing).ceil() as i32,
         (GRID_SIZE / spacing).floor() as i32,
@@ -72,10 +68,6 @@ pub fn mesh(ctx: &Context, magnification: f32) -> Result<Mesh> {
     // Multiply integer tick indices by the spacing to avoid accumulating floating-point error.
 
     for c in start..=end {
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "magnification is clamped in main"
-        )]
         let c = c as f32 * spacing;
 
         // to not overlap with axes

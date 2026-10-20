@@ -41,12 +41,6 @@ impl Ui {
         graph_viewport
     }
 
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::cast_precision_loss,
-        reason = "Convert bounded logical UI coordinates to physical window pixels"
-    )]
     fn show(&mut self, ui: &mut egui::Ui, viewport: Viewport, pixel_ratio: f32) -> Viewport {
         egui::Panel::left("sidebar")
             .default_size(260.0)
