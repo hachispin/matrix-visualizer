@@ -1,8 +1,8 @@
 //! For shapes.
 
-use three_d::{ColorMaterial, Context, CpuMesh, Gm, Mat4, Mesh, Srgba, Vec3};
+use three_d::{ColorMaterial, Context, CpuMesh, Gm, Mat3, Mat4, Mesh, Srgba, Vec3};
 
-use crate::grid;
+use crate::{grid, utils};
 
 /// An editable point in graph coordinates. IDs keep its UI and GPU object stable.
 #[derive(Clone, Debug, PartialEq)]
@@ -35,7 +35,14 @@ impl Default for Points {
 
 impl Points {
     /// Update explicitly when point data or its graph-to-world mapping changes.
-    pub fn update(&mut self, ctx: &Context, points: &[Point], point_to_world: Mat4) {
+    pub fn update(
+        &mut self,
+        ctx: &Context,
+        points: &[Point],
+        transformation: Mat3,
+        centre: Vec3,
+        magnification: f32,
+    ) {
         const RADIUS: f32 = 0.12;
 
         self.objects
@@ -52,16 +59,15 @@ impl Points {
                         object: Gm::new(Mesh::new(ctx, &self.mesh), ColorMaterial::default()),
                         visible: false,
                     });
+
                     self.objects.len() - 1
                 });
 
             let rendered = &mut self.objects[index];
-            let position = (point_to_world * point.position.extend(1.0)).truncate();
+            let position =
+                utils::graph_to_world(transformation * point.position, centre, magnification);
 
-            rendered.visible = point.visible
-                && [position.x, position.y, position.z]
-                    .into_iter()
-                    .all(|coordinate| coordinate.abs() + RADIUS <= grid::GRID_SIZE);
+            rendered.visible = point.visible && grid::contains(position, RADIUS);
 
             if rendered.visible {
                 rendered.object.material.color = point.color;

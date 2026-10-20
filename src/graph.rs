@@ -11,6 +11,7 @@ use crate::{
     palette,
     shapes::{Point, Points},
     ui::Ui,
+    utils,
 };
 
 const ORIGIN_RADIUS: f32 = 0.1;
@@ -90,20 +91,18 @@ impl Graph {
         }
 
         if view_changed {
-            let position = -centre * magnification;
+            let position = utils::graph_to_world(Vec3::zero(), centre, magnification);
+
             self.origin.set_transformation(
                 Mat4::from_translation(position) * Mat4::from_scale(ORIGIN_RADIUS),
             );
 
-            self.origin_visible = [position.x, position.y, position.z]
-                .into_iter()
-                .all(|coordinate| coordinate.abs() + ORIGIN_RADIUS <= grid::GRID_SIZE);
+            self.origin_visible = grid::contains(position, ORIGIN_RADIUS);
         }
 
         if points_changed || view_changed || matrix_changed {
-            let graph_to_world = Mat4::from_scale(magnification) * Mat4::from_translation(-centre);
-            let point_to_world = graph_to_world * Mat4::from(ui.transformation);
-            self.points.update(ctx, &ui.points, point_to_world);
+            self.points
+                .update(ctx, &ui.points, ui.transformation, centre, magnification);
         }
 
         self.state.centre = centre;

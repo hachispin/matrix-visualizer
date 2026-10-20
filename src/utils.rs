@@ -79,12 +79,12 @@ pub fn draw_2d_line(
     Ok(())
 }
 
-// will probably use later
-//
-// pub fn graph_to_world(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
-//     (point - centre) * magnification
-// }
-//
-// pub fn world_to_graph(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
-//     point / magnification + centre
-// }
+/// Map graph coordinates into the fixed world-space grid.
+pub fn graph_to_world(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
+    (point - centre) * magnification
+}
+
+/// Map world coordinates back into graph coordinates.
+pub fn world_to_graph(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
+    point / magnification + centre
+}

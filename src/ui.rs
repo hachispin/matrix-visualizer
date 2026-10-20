@@ -103,11 +103,7 @@ impl Ui {
 
         ui.horizontal_wrapped(|ui| {
             if ui.button("Add point").clicked() {
-                let mut id = 0;
-
-                while self.points.iter().any(|point| point.id == id) {
-                    id += 1;
-                }
+                let id = available_id(self.points.iter().map(|point| point.id));
 
                 self.points.push(Point {
                     id,
@@ -120,11 +116,7 @@ impl Ui {
             }
 
             if ui.button("Add matrix").clicked() {
-                let mut id = 0;
-
-                while self.matrices.iter().any(|matrix| matrix.id == id) {
-                    id += 1;
-                }
+                let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
 
                 self.matrices.push(MatrixInput { id, rows: IDENTITY });
                 self.matrices.sort_by_key(|matrix| matrix.id);
@@ -275,6 +267,25 @@ impl Ui {
 
         (!remove, transform && !remove)
     }
+}
+
+fn available_id(ids: impl Iterator<Item = usize>) -> usize {
+    let mut used: Vec<_> = ids.collect();
+    used.sort_unstable();
+
+    let mut available = 0;
+
+    for id in used {
+        if id > available {
+            break;
+        }
+
+        if id == available {
+            available += 1;
+        }
+    }
+
+    available
 }
 
 fn number_input(value: &mut f32) -> egui::DragValue<'_> {

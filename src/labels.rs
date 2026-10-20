@@ -19,7 +19,7 @@ use three_d::{
     prelude::*,
 };
 
-use crate::{grid, palette};
+use crate::{grid, palette, utils};
 
 const FONT_SIZE: f32 = 64.0;
 const NUMBER_TEXT_HEIGHT: f32 = 0.2;
@@ -109,8 +109,8 @@ impl Labels {
             }
 
             let position = tick as f32 * spacing;
-            let value = tick as f32 * step;
-            let values = vec3(value, value, value) + centre;
+            let values =
+                utils::world_to_graph(vec3(position, position, position), centre, magnification);
 
             let (mut object, half_width) = text_gm(
                 ctx,
@@ -118,6 +118,7 @@ impl Labels {
                 &format_value(values.x, step),
                 NUMBER_TEXT_HEIGHT,
             )?;
+
             object.set_transformation(Mat4::from_translation(vec3(position, -0.3, PLANE_HEIGHT)));
             max_width = max_width.max(2.0 * half_width);
             horizontal.push((tick, object));
@@ -142,6 +143,7 @@ impl Labels {
 
         // Leave room for the widest X label, keeping the chosen ticks symmetric about zero.
         let stride = ((max_width + NUMBER_GAP) / spacing).ceil().max(1.0) as i32;
+
         self.plane.extend(
             horizontal
                 .into_iter()
@@ -159,6 +161,7 @@ impl Labels {
             false,
             AXIS_TEXT_HEIGHT,
         )?);
+
         self.plane.push(Self::plane_label(
             ctx,
             &self.axis_font,
@@ -167,6 +170,7 @@ impl Labels {
             false,
             AXIS_TEXT_HEIGHT,
         )?);
+
         self.vertical.push(Self::vertical_label(
             ctx,
             &self.axis_font,

@@ -7,8 +7,16 @@ use crate::{palette, utils};
 
 /// The cubic grid extends out `GRID_SIZE` world units from its origin in all six directions.
 pub(crate) const GRID_SIZE: f32 = 5.0;
+
 /// Width of grid lines.
 const LINE_WIDTH: f32 = 0.05;
+
+/// Whether a world-space point and its marker radius fit inside the grid bounds.
+pub fn contains(position: Vec3, radius: f32) -> bool {
+    [position.x, position.y, position.z]
+        .into_iter()
+        .all(|coordinate| coordinate.abs() + radius <= GRID_SIZE)
+}
 
 /// Draws -x → +x axis arrow. Transform accordingly for other axes.
 fn draw_axis_arrow() -> Result<CpuMesh> {
