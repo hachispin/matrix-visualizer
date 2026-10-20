@@ -187,15 +187,8 @@ pub fn main() -> Result<()> {
     let mut origin_visible = true;
 
     window.render_loop(move |mut frame_input| {
-        camera.set_viewport(frame_input.viewport);
-
-        gui.update(
-            &mut frame_input.events,
-            frame_input.accumulated_time,
-            frame_input.viewport,
-            frame_input.device_pixel_ratio,
-            |root| ui.show(root),
-        );
+        let graph_viewport = ui.update(&mut gui, &mut frame_input);
+        camera.set_viewport(graph_viewport);
 
         let prev_zoom_steps = zoom_steps;
         let prev_centre = centre;
@@ -249,7 +242,8 @@ pub fn main() -> Result<()> {
         frame_input
             .screen()
             .clear(ClearState::color_and_depth(r, g, b, 1.0, 1.0))
-            .render(
+            .render_partially(
+                graph_viewport.into(),
                 &camera,
                 iter::once(&grid_gm)
                     .chain(origin_visible.then_some(&origin_marker))
