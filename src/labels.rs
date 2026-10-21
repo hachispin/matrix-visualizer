@@ -237,6 +237,22 @@ fn cylindrical_facing(camera_position: Vec3) -> Option<Mat4> {
 }
 
 fn format_value(value: f32, step: f32) -> String {
+    if value != 0.0 && (value.abs() >= 10_000.0 || value.abs() <= 0.001) {
+        let precision =
+            (value.abs().log10().floor() - step.log10().floor() + 1.0).clamp(0.0, 6.0) as usize;
+        let text = format!("{value:.precision$e}");
+        let (mantissa, exponent) = text
+            .split_once('e')
+            .expect("Scientific notation has an exponent");
+        let mantissa = if mantissa.contains('.') {
+            mantissa.trim_end_matches('0').trim_end_matches('.')
+        } else {
+            mantissa
+        };
+
+        return format!("{mantissa}e{exponent}");
+    }
+
     let precision = (1.0 - step.log10().floor()).clamp(0.0, 6.0) as usize;
     let text = format!("{value:.precision$}");
 

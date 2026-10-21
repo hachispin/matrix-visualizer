@@ -36,8 +36,8 @@ fn draw_axis_arrow() -> Result<CpuMesh> {
 /// Largest 1–2–5 graph interval that fits within one world unit at this zoom.
 /// This keeps gridline spacing between 0.4 and 1 world units.
 pub(crate) fn interval(magnification: f32) -> f32 {
-    let target = magnification.recip();
-    let decade = 10.0_f32.powf(target.log10().floor());
+    let target = f64::from(magnification).recip();
+    let decade = 10.0_f64.powf(target.log10().floor());
     let fraction = target / decade;
 
     let factor = if fraction >= 5.0 {
@@ -48,7 +48,20 @@ pub(crate) fn interval(magnification: f32) -> f32 {
         1.0
     };
 
-    factor * decade
+    (factor * decade) as f32
+}
+
+/// Whether the zoom and the graph coordinates throughout the visible grid remain finite.
+pub(crate) fn view_is_finite(centre: Vec3, magnification: f32) -> bool {
+    if !magnification.is_finite() || magnification <= 0.0 {
+        return false;
+    }
+
+    let extent = GRID_SIZE / magnification;
+
+    [centre.x, centre.y, centre.z]
+        .into_iter()
+        .all(|coordinate| (coordinate - extent).is_finite() && (coordinate + extent).is_finite())
 }
 
 /// Draws the grid mesh. Should only be called if needed as this draws on every call.

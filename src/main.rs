@@ -47,7 +47,7 @@ use three_d::{
 use crate::graph::Graph;
 
 // this prevents drift (from repeatedly multiplying and dividing by 1.1)
-fn zoom_magnification(steps: i32) -> f32 { 1.1_f32.powi(steps).clamp(0.001, 1000.0) }
+fn zoom_magnification(steps: i32) -> f32 { 1.1_f64.powi(steps) as f32 }
 
 fn input_handler(
     events: &mut [Event],
@@ -88,12 +88,19 @@ fn input_handler(
                 continue;
             }
 
-            // vertical scroll amount (positive = up)
-            // don't change zoom steps if already at bounds
-            if delta.1 > 0.0 && zoom_magnification(*zoom_steps) < 1000.0 {
-                *zoom_steps += 1;
-            } else if delta.1 < 0.0 && zoom_magnification(*zoom_steps) > 0.001 {
-                *zoom_steps -= 1;
+            // Stop only when the next zoom would exceed the numeric range of the view.
+            let direction = if delta.1 > 0.0 {
+                1
+            } else if delta.1 < 0.0 {
+                -1
+            } else {
+                0
+            };
+
+            if let Some(candidate) = zoom_steps.checked_add(direction)
+                && grid::view_is_finite(*centre, zoom_magnification(candidate))
+            {
+                *zoom_steps = candidate;
             }
 
             *handled = true;
@@ -114,17 +121,24 @@ fn input_handler(
                 continue;
             }
 
-            let step = grid::interval(zoom_magnification(*zoom_steps));
+            let magnification = zoom_magnification(*zoom_steps);
+            let step = f64::from(grid::interval(magnification));
             let offset = if modifiers.shift { -step } else { step };
 
+            let mut candidate = *centre;
+
             let coordinate = match k {
-                Key::X => &mut centre.x,
-                Key::Y => &mut centre.y,
-                Key::Z => &mut centre.z,
+                Key::X => &mut candidate.x,
+                Key::Y => &mut candidate.y,
+                Key::Z => &mut candidate.z,
                 _ => unreachable!(),
             };
 
-            *coordinate = ((*coordinate + offset) / step).round() * step;
+            *coordinate = (((f64::from(*coordinate) + offset) / step).round() * step) as f32;
+
+            if grid::view_is_finite(candidate, magnification) {
+                *centre = candidate;
+            }
 
             *handled = true;
         }
