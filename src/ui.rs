@@ -1,6 +1,6 @@
 //! Sidebar editors for points and 3×3 linear transformations.
 
-use three_d::{FrameInput, GUI, Mat3, SquareMatrix, Viewport, egui, vec3};
+use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Viewport, egui, vec3};
 
 use crate::{palette, shapes::Point};
 
@@ -9,6 +9,12 @@ const IDENTITY: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.
 struct MatrixInput {
     id: usize,
     rows: [[f32; 3]; 3],
+}
+
+#[derive(Clone, Copy)]
+struct FocusedMatrixEntry {
+    id: egui::Id,
+    last: bool,
 }
 
 impl MatrixInput {
@@ -26,6 +32,7 @@ pub struct Ui {
     pub points: Vec<Point>,
     pub transformation: Mat3,
     matrices: Vec<MatrixInput>,
+    focused_matrix_entry: Option<FocusedMatrixEntry>,
     error: Option<String>,
 }
 
@@ -58,11 +65,45 @@ impl Ui {
                 id: 0,
                 rows: IDENTITY,
             }],
+            focused_matrix_entry: None,
             error: None,
         }
     }
 
     pub fn update(&mut self, gui: &mut GUI, frame: &mut FrameInput) -> Viewport {
+        // Use egui's normal Tab navigation when a comma is typed into a matrix entry.
+        if let Some(entry) = self.focused_matrix_entry
+            && gui.context().memory(egui::Memory::focused) == Some(entry.id)
+        {
+            let mut comma_pressed = false;
+
+            frame.events.retain_mut(|event| {
+                if matches!(event, Event::Text(text) if text == ",") {
+                    if entry.last {
+                        return false;
+                    }
+
+                    *event = Event::KeyPress {
+                        kind: Key::Tab,
+                        modifiers: three_d::Modifiers::default(),
+                        handled: false,
+                    };
+
+                    comma_pressed = true;
+                }
+
+                true
+            });
+
+            if comma_pressed {
+                frame.events.push(Event::KeyRelease {
+                    kind: Key::Tab,
+                    modifiers: three_d::Modifiers::default(),
+                    handled: false,
+                });
+            }
+        }
+
         let mut graph_viewport = frame.viewport;
 
         gui.update(
@@ -99,6 +140,8 @@ impl Ui {
     }
 
     fn controls(&mut self, ui: &mut egui::Ui) {
+        self.focused_matrix_entry = None;
+
         ui.heading("Matrix Visualizer");
 
         ui.horizontal_wrapped(|ui| {
@@ -161,7 +204,8 @@ impl Ui {
 
                 self.matrices.retain_mut(|matrix| {
                     ui.push_id(("matrix", matrix.id), |ui| {
-                        let (keep, transform) = Self::matrix_editor(ui, matrix);
+                        let (keep, transform) =
+                            Self::matrix_editor(ui, matrix, &mut self.focused_matrix_entry);
 
                         if transform {
                             apply = Some(matrix.matrix());
@@ -229,7 +273,11 @@ impl Ui {
         !remove
     }
 
-    fn matrix_editor(ui: &mut egui::Ui, matrix: &mut MatrixInput) -> (bool, bool) {
+    fn matrix_editor(
+        ui: &mut egui::Ui,
+        matrix: &mut MatrixInput,
+        focused_entry: &mut Option<FocusedMatrixEntry>,
+    ) -> (bool, bool) {
         let mut remove = false;
         let mut transform = false;
 
@@ -245,9 +293,16 @@ impl Ui {
             let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
 
             egui::Grid::new("entries").num_columns(3).show(ui, |ui| {
-                for row in &mut matrix.rows {
-                    for entry in row {
-                        ui.add_sized([width, 24.0], number_input(entry));
+                for (row_index, row) in matrix.rows.iter_mut().enumerate() {
+                    for (column_index, entry) in row.iter_mut().enumerate() {
+                        let response = ui.add_sized([width, 24.0], number_input(entry));
+
+                        if response.has_focus() {
+                            *focused_entry = Some(FocusedMatrixEntry {
+                                id: response.id,
+                                last: row_index == 2 && column_index == 2,
+                            });
+                        }
                     }
 
                     ui.end_row();
