@@ -18,6 +18,12 @@ impl Default for MatrixInput {
     }
 }
 
+enum MatrixAction {
+    Remove,
+    Apply,
+    CreateInverse,
+}
+
 #[derive(Clone, Copy)]
 struct FocusedMatrixEntry {
     id: egui::Id,
@@ -176,6 +182,7 @@ impl Ui {
         ui.separator();
 
         let mut apply = None;
+        let mut create_inverse = None;
 
         egui::ScrollArea::both()
             .auto_shrink([false, false])
@@ -198,18 +205,42 @@ impl Ui {
 
                 self.matrices.retain_mut(|matrix| {
                     ui.push_id(("matrix", matrix.id), |ui| {
-                        let (keep, transform) =
-                            Self::matrix_editor(ui, matrix, &mut self.focused_matrix_entry);
+                        match Self::matrix_editor(ui, matrix, &mut self.focused_matrix_entry) {
+                            Some(MatrixAction::Remove) => false,
+                            Some(MatrixAction::Apply) => {
+                                apply = Some(matrix.matrix);
 
-                        if transform {
-                            apply = Some(matrix.matrix);
+                                true
+                            },
+                            Some(MatrixAction::CreateInverse) => {
+                                create_inverse = Some(matrix.matrix);
+
+                                true
+                            },
+                            None => true,
                         }
-
-                        keep
                     })
                     .inner
                 });
             });
+
+        if let Some(matrix) = create_inverse {
+            let inverse = matrix.invert().filter(|inverse| {
+                let entries: &[[_; 3]; 3] = inverse.as_ref();
+
+                entries.iter().flatten().all(|value| value.is_finite())
+            });
+
+            if let Some(matrix) = inverse {
+                let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
+
+                self.matrices.push(MatrixInput { id, matrix });
+                self.matrices.sort_by_key(|matrix| matrix.id);
+                self.error = None;
+            } else {
+                self.error = Some("Matrix has no finite inverse!".to_owned());
+            }
+        }
 
         if let Some(matrix) = apply {
             let candidate = matrix * self.transformation;
@@ -286,9 +317,9 @@ impl Ui {
         ui: &mut egui::Ui,
         matrix: &mut MatrixInput,
         focused_entry: &mut Option<FocusedMatrixEntry>,
-    ) -> (bool, bool) {
+    ) -> Option<MatrixAction> {
         let mut remove = false;
-        let mut transform = false;
+        let mut action = None;
 
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -321,18 +352,28 @@ impl Ui {
                 }
             });
 
-            ui.horizontal(|ui| {
-                if ui.button("Identity").clicked() {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Set to identity").clicked() {
                     matrix.matrix = Mat3::identity();
                 }
 
-                transform = ui.button("Transform").clicked();
+                if ui.button("Apply").clicked() {
+                    action = Some(MatrixAction::Apply);
+                }
+
+                if ui.button("Create inverse").clicked() {
+                    action = Some(MatrixAction::CreateInverse);
+                }
             });
         });
 
         ui.add_space(6.0);
 
-        (!remove, transform && !remove)
+        if remove {
+            Some(MatrixAction::Remove)
+        } else {
+            action
+        }
     }
 }
 
@@ -356,5 +397,8 @@ fn available_id(ids: impl Iterator<Item = usize>) -> usize {
 }
 
 fn number_input(value: &mut f32) -> egui::DragValue<'_> {
-    egui::DragValue::new(value).speed(0.1).range(-1.0e6..=1.0e6)
+    egui::DragValue::new(value)
+        .speed(0.1)
+        .range(-1.0e6..=1.0e6)
+        .clamp_existing_to_range(false)
 }
