@@ -1,22 +1,35 @@
 //! For shapes.
 
-use three_d::{ColorMaterial, Context, CpuMesh, Gm, Mat3, Mat4, Mesh, Srgba, Vec3};
+use three_d::{ColorMaterial, Context, CpuMesh, Gm, Mat3, Mat4, Mesh, Srgba, Vec3, vec3};
 
-use crate::{grid, utils};
+use crate::{grid, palette, utils};
 
 /// An editable point in graph coordinates. IDs keep its UI and GPU object stable.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Point {
     pub id: usize,
     pub position: Vec3,
-    pub color: Srgba,
-    pub visible: bool,
+    pub hidden: bool,
+}
+
+impl Default for Point {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            position: vec3(1.0, 1.0, 1.0),
+            hidden: false,
+        }
+    }
+}
+
+impl Point {
+    pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
 }
 
 struct RenderedPoint {
     id: usize,
     object: Gm<Mesh, ColorMaterial>,
-    visible: bool,
+    hidden: bool,
 }
 
 pub struct Points {
@@ -57,7 +70,7 @@ impl Points {
                     self.objects.push(RenderedPoint {
                         id: point.id,
                         object: Gm::new(Mesh::new(ctx, &self.mesh), ColorMaterial::default()),
-                        visible: false,
+                        hidden: true,
                     });
 
                     self.objects.len() - 1
@@ -67,10 +80,10 @@ impl Points {
             let position =
                 utils::graph_to_world(transformation * point.position, centre, magnification);
 
-            rendered.visible = point.visible && grid::contains(position, RADIUS);
+            rendered.hidden = point.hidden || !grid::contains(position, RADIUS);
 
-            if rendered.visible {
-                rendered.object.material.color = point.color;
+            if !rendered.hidden {
+                rendered.object.material.color = point.color();
                 rendered.object.set_transformation(
                     Mat4::from_translation(position) * Mat4::from_scale(RADIUS),
                 );
@@ -81,7 +94,7 @@ impl Points {
     pub fn objects(&self) -> impl Iterator<Item = &Gm<Mesh, ColorMaterial>> {
         self.objects
             .iter()
-            .filter(|point| point.visible)
+            .filter(|point| !point.hidden)
             .map(|point| &point.object)
     }
 }

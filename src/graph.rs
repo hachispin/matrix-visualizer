@@ -24,6 +24,18 @@ struct State {
     transformation: Mat3,
 }
 
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            centre: Vec3::zero(),
+            magnification: 1.0,
+            heading: 0,
+            points: Vec::new(),
+            transformation: Mat3::identity(),
+        }
+    }
+}
+
 pub struct Graph {
     grid: Gm<Mesh, ColorMaterial>,
     labels: Labels,
@@ -35,9 +47,12 @@ pub struct Graph {
 
 impl Graph {
     pub fn new(ctx: &Context, camera: &Camera) -> Result<Self> {
+        let grid = Gm::new(grid::mesh(ctx, 1.0)?, ColorMaterial::default());
+
         let mut labels = Labels::new(ctx, Vec3::zero(), 1.0)?;
         labels.face_camera(camera);
 
+        // origin marker
         let mut origin = Gm::new(
             Mesh::new(ctx, &CpuMesh::sphere(16)),
             ColorMaterial {
@@ -49,21 +64,22 @@ impl Graph {
         origin.set_transformation(Mat4::from_scale(ORIGIN_RADIUS));
 
         Ok(Self {
-            grid: Gm::new(grid::mesh(ctx, 1.0)?, ColorMaterial::default()),
+            grid,
             labels,
             origin,
             origin_visible: true,
             points: Points::default(),
             state: State {
-                centre: Vec3::zero(),
-                magnification: 1.0,
                 heading: camera_heading(camera),
-                points: Vec::new(),
-                transformation: Mat3::identity(),
+                ..Default::default()
             },
         })
     }
 
+    /// Updates certain components of the graph depending on what has changed.
+    ///
+    /// For instance, if the transformations have changed, points need to be updated. However, other
+    /// components such as labels don't need to change (be redrawn). This helps with performance.
     pub fn update(
         &mut self,
         ctx: &Context,
