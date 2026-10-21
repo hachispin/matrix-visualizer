@@ -184,7 +184,7 @@ impl Ui {
         let mut apply = None;
         let mut create_inverse = None;
 
-        egui::ScrollArea::both()
+        egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.heading("Points");
@@ -285,7 +285,7 @@ impl Ui {
                 ] {
                     ui.add_sized(
                         [width, 24.0],
-                        number_input(coordinate).prefix(format!("{axis}: ")),
+                        number_input(coordinate, &format!("{axis}: ")),
                     );
                 }
             });
@@ -301,7 +301,7 @@ impl Ui {
                     ] {
                         ui.add_sized(
                             [width, 24.0],
-                            number_input(coordinate).prefix(format!("{axis}: ")),
+                            number_input(coordinate, &format!("{axis}: ")),
                         );
                     }
                 });
@@ -337,7 +337,7 @@ impl Ui {
                     for column in 0..3 {
                         let response = ui.add_sized(
                             [width, 24.0],
-                            number_input(&mut matrix.matrix[column][row]),
+                            number_input(&mut matrix.matrix[column][row], ""),
                         );
 
                         if response.has_focus() {
@@ -396,9 +396,114 @@ fn available_id(ids: impl Iterator<Item = usize>) -> usize {
     available
 }
 
-fn number_input(value: &mut f32) -> egui::DragValue<'_> {
-    egui::DragValue::new(value)
-        .speed(0.1)
-        .range(-1.0e6..=1.0e6)
-        .clamp_existing_to_range(false)
+fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 'a {
+    move |ui: &mut egui::Ui| {
+        let id = ui.next_auto_id();
+        let edit_id = id.with("number_text");
+        let text_style = ui.style().drag_value_text_style.clone();
+
+        let (response, truncated) = if ui.is_enabled() && ui.memory(|memory| memory.has_focus(id)) {
+            let buffer = ui.data_mut(|data| data.remove_temp::<String>(edit_id));
+            let start_editing = buffer.is_none();
+            let mut text = buffer.unwrap_or_else(|| value.to_string());
+
+            if start_editing {
+                let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+                state
+                    .cursor
+                    .set_char_range(Some(egui::text::CCursorRange::two(
+                        egui::text::CCursor::default(),
+                        egui::text::CCursor::new(text.chars().count()),
+                    )));
+                state.store(ui.ctx(), id);
+            }
+
+            let output = egui::TextEdit::singleline(&mut text)
+                .id(id)
+                .clip_text(true)
+                .font(text_style)
+                .margin(ui.spacing().button_padding)
+                .desired_width(ui.available_width())
+                .min_size(ui.spacing().interact_size)
+                .show(ui);
+
+            let truncated = output.galley.size().x > output.text_clip_rect.width();
+            let response = output.response.response;
+
+            if response.changed() {
+                let normalized: String = text
+                    .chars()
+                    .filter(|character| !character.is_whitespace())
+                    .map(|character| if character == '−' { '-' } else { character })
+                    .collect();
+
+                if let Ok(parsed) = normalized.parse() {
+                    *value = parsed;
+                }
+            }
+
+            if response.has_focus() {
+                ui.data_mut(|data| data.insert_temp(edit_id, text));
+            }
+
+            (response, truncated)
+        } else {
+            ui.data_mut(|data| data.remove::<String>(edit_id));
+
+            let font = text_style.resolve(ui.style());
+            let color = ui.visuals().text_color();
+            let width = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
+
+            // Only shorten the label, never the stored number or edit buffer.
+            let mut label = value.to_string();
+
+            let truncated = ui.fonts_mut(|fonts| {
+                let mut fits = |text: &str| {
+                    fonts
+                        .layout_no_wrap(format!("{prefix}{text}"), font.clone(), color)
+                        .size()
+                        .x
+                        <= width
+                };
+
+                let truncated = !fits(&label);
+
+                if truncated {
+                    while !label.is_empty() {
+                        label.pop();
+
+                        if fits(&format!("{label}…")) {
+                            break;
+                        }
+                    }
+
+                    label.push('…');
+                }
+
+                truncated
+            });
+
+            let response = ui.add(
+                egui::Button::new(
+                    egui::RichText::new(format!("{prefix}{label}")).text_style(text_style),
+                )
+                .sense(egui::Sense::click())
+                .min_size(ui.spacing().interact_size),
+            );
+
+            if response.clicked() {
+                ui.memory_mut(|memory| memory.request_focus(response.id));
+            }
+
+            (response, truncated)
+        };
+
+        if truncated {
+            response
+                .on_hover_text(value.to_string())
+                .on_disabled_hover_text(value.to_string())
+        } else {
+            response
+        }
+    }
 }
