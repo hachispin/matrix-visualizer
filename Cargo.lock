@@ -808,6 +808,7 @@ dependencies = [
  "anyhow",
  "fontdue",
  "three-d",
+ "wasm-bindgen",
 ]
 
 [[package]]

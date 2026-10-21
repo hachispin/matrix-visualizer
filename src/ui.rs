@@ -203,6 +203,7 @@ impl Default for Ui {
 impl Ui {
     pub fn new(context: &egui::Context) -> Self {
         context.set_theme(egui::Theme::Light);
+        context.global_style_mut(|style| style.interaction.selectable_labels = false);
 
         let mut fonts = egui::FontDefinitions::default();
 
@@ -259,6 +260,12 @@ impl Ui {
 
         let mut graph_viewport = frame.viewport;
 
+        #[cfg(target_arch = "wasm32")]
+        crate::web_input::begin_frame(
+            frame.viewport.width as f32 / frame.device_pixel_ratio,
+            frame.viewport.height as f32 / frame.device_pixel_ratio,
+        );
+
         gui.update(
             &mut frame.events,
             frame.accumulated_time,
@@ -268,6 +275,9 @@ impl Ui {
                 graph_viewport = self.show(root, frame.viewport, frame.device_pixel_ratio);
             },
         );
+
+        #[cfg(target_arch = "wasm32")]
+        crate::web_input::end_frame();
 
         self.capture_sidebar_input(&mut frame.events, graph_viewport);
 
@@ -528,7 +538,9 @@ impl Ui {
         let mut create_inverse = None;
 
         egui::ScrollArea::vertical()
+            .id_salt("sidebar_scroll")
             .auto_shrink([false, false])
+            .animated(false)
             .show(ui, |ui| {
                 let target = self.target_transformation();
 
@@ -886,113 +898,73 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
     move |ui: &mut egui::Ui| {
         let id = ui.next_auto_id();
         let edit_id = id.with("number_text");
-        let text_style = ui.style().drag_value_text_style.clone();
-        let buffer = ui.data_mut(|data| data.remove_temp::<String>(edit_id));
-        let editing =
-            ui.is_enabled() && (ui.memory(|memory| memory.has_focus(id)) || buffer.is_some());
 
-        let (response, truncated, full_text) = if editing {
-            let start_editing = buffer.is_none();
-            let mut text = buffer.unwrap_or_else(|| value.to_string());
+        #[cfg(target_arch = "wasm32")]
+        let web_id = id.value().to_string();
 
-            if start_editing {
-                let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
-                state
-                    .cursor
-                    .set_char_range(Some(egui::text::CCursorRange::two(
-                        egui::text::CCursor::default(),
-                        egui::text::CCursor::new(text.chars().count()),
-                    )));
-                state.store(ui.ctx(), id);
-            }
+        #[cfg(target_arch = "wasm32")]
+        let committed = crate::web_input::take_value(&web_id)
+            .and_then(|text| parse_number(&text))
+            .is_some_and(|parsed| {
+                *value = parsed;
 
-            let output = egui::TextEdit::singleline(&mut text)
-                .id(id)
-                .clip_text(true)
-                .font(text_style)
-                .margin(ui.spacing().button_padding)
-                .desired_width(ui.available_width())
-                .min_size(ui.spacing().interact_size)
-                .show(ui);
-
-            let truncated = output.galley.size().x > output.text_clip_rect.width();
-            let mut response = output.response.response;
-            let finished = !response.has_focus() || response.clicked_elsewhere();
-            let cancelled = ui.input(|input| input.key_pressed(egui::Key::Escape));
-
-            if !cancelled && (response.changed() || finished) {
-                let normalized: String = text
-                    .chars()
-                    .filter(|character| !character.is_whitespace())
-                    .map(|character| if character == '−' { '-' } else { character })
-                    .collect();
-
-                if let Ok(parsed) = normalized.parse::<f32>() {
-                    if parsed.is_finite() {
-                        if finished {
-                            *value = parsed;
-                            response.mark_changed();
-                        }
-                    } else {
-                        text = value.to_string();
-                    }
-                }
-            }
-
-            if finished {
-                ui.memory_mut(|memory| memory.surrender_focus(id));
-            } else {
-                ui.data_mut(|data| data.insert_temp(edit_id, text.clone()));
-            }
-
-            (response, truncated, text)
-        } else {
-            let font = text_style.resolve(ui.style());
-            let color = ui.visuals().text_color();
-            let width = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
-
-            // Only shorten the label, never the stored number or edit buffer.
-            let mut label = value.to_string();
-
-            let truncated = ui.fonts_mut(|fonts| {
-                let mut fits = |text: &str| {
-                    fonts
-                        .layout_no_wrap(format!("{prefix}{text}"), font.clone(), color)
-                        .size()
-                        .x
-                        <= width
-                };
-
-                let truncated = !fits(&label);
-
-                if truncated {
-                    while !label.is_empty() {
-                        label.pop();
-
-                        if fits(&format!("{label}…")) {
-                            break;
-                        }
-                    }
-
-                    label.push('…');
-                }
-
-                truncated
+                true
             });
 
-            let response = ui.add(
-                egui::Button::new(
-                    egui::RichText::new(format!("{prefix}{label}")).text_style(text_style),
-                )
-                .sense(egui::Sense::click())
-                .min_size(ui.spacing().interact_size),
-            );
+        #[cfg(target_arch = "wasm32")]
+        let touch_editing = crate::web_input::is_editing(&web_id);
 
-            if response.clicked() {
-                ui.memory_mut(|memory| memory.request_focus(response.id));
+        #[cfg(not(target_arch = "wasm32"))]
+        let touch_editing = false;
+
+        if touch_editing {
+            ui.memory_mut(|memory| memory.surrender_focus(id));
+        }
+
+        let buffer = ui.data_mut(|data| data.remove_temp::<String>(edit_id));
+        let editing = ui.is_enabled()
+            && !touch_editing
+            && (ui.memory(|memory| memory.has_focus(id)) || buffer.is_some());
+
+        let (response, truncated, full_text) = if editing {
+            number_editor(ui, id, value, buffer)
+        } else {
+            number_display(ui, *value, prefix, touch_editing)
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        let response = {
+            let mut response = response;
+
+            if committed {
+                response.mark_changed();
             }
 
-            (response, truncated, value.to_string())
+            if ui.is_enabled()
+                && (touch_editing || ui.is_rect_visible(response.rect))
+                && !egui::Popup::is_any_open(ui.ctx())
+            {
+                let rect = response.rect;
+                let clip = ui.clip_rect();
+
+                crate::web_input::register_number(
+                    &web_id,
+                    &value.to_string(),
+                    prefix.trim_end_matches(": "),
+                    &[
+                        rect.left(),
+                        rect.top(),
+                        rect.width(),
+                        rect.height(),
+                        clip.left(),
+                        clip.top(),
+                        clip.right(),
+                        clip.bottom(),
+                    ],
+                );
+            }
+
+            response
         };
 
         if truncated {
@@ -1003,4 +975,132 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
             response
         }
     }
+}
+
+fn number_editor(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    value: &mut f32,
+    buffer: Option<String>,
+) -> (egui::Response, bool, String) {
+    let edit_id = id.with("number_text");
+    let text_style = ui.style().drag_value_text_style.clone();
+    let start_editing = buffer.is_none();
+    let mut text = buffer.unwrap_or_else(|| value.to_string());
+
+    if start_editing {
+        let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+        state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::two(
+                egui::text::CCursor::default(),
+                egui::text::CCursor::new(text.chars().count()),
+            )));
+        state.store(ui.ctx(), id);
+    }
+
+    let output = egui::TextEdit::singleline(&mut text)
+        .id(id)
+        .clip_text(true)
+        .font(text_style)
+        .margin(ui.spacing().button_padding)
+        .desired_width(ui.available_width())
+        .min_size(ui.spacing().interact_size)
+        .show(ui);
+
+    let truncated = output.galley.size().x > output.text_clip_rect.width();
+    let mut response = output.response.response;
+    let finished = !response.has_focus() || response.clicked_elsewhere();
+    let cancelled = ui.input(|input| input.key_pressed(egui::Key::Escape));
+
+    if !cancelled && (response.changed() || finished) {
+        let normalized: String = text
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .map(|character| if character == '−' { '-' } else { character })
+            .collect();
+
+        if let Ok(parsed) = normalized.parse::<f32>() {
+            if parsed.is_finite() {
+                if finished {
+                    *value = parsed;
+                    response.mark_changed();
+                }
+            } else {
+                text = value.to_string();
+            }
+        }
+    }
+
+    if finished {
+        ui.memory_mut(|memory| memory.surrender_focus(id));
+    } else {
+        ui.data_mut(|data| data.insert_temp(edit_id, text.clone()));
+    }
+
+    (response, truncated, text)
+}
+
+fn number_display(
+    ui: &mut egui::Ui,
+    value: f32,
+    prefix: &str,
+    touch_editing: bool,
+) -> (egui::Response, bool, String) {
+    let text_style = ui.style().drag_value_text_style.clone();
+    let font = text_style.resolve(ui.style());
+    let color = ui.visuals().text_color();
+    let width = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
+
+    // Only shorten the label, never the stored number or edit buffer.
+    let mut label = value.to_string();
+
+    let truncated = ui.fonts_mut(|fonts| {
+        let mut fits = |text: &str| {
+            fonts
+                .layout_no_wrap(format!("{prefix}{text}"), font.clone(), color)
+                .size()
+                .x
+                <= width
+        };
+
+        let truncated = !fits(&label);
+
+        if truncated {
+            while !label.is_empty() {
+                label.pop();
+
+                if fits(&format!("{label}…")) {
+                    break;
+                }
+            }
+
+            label.push('…');
+        }
+
+        truncated
+    });
+
+    let response = ui.add(
+        egui::Button::new(egui::RichText::new(format!("{prefix}{label}")).text_style(text_style))
+            .sense(egui::Sense::click())
+            .min_size(ui.spacing().interact_size),
+    );
+
+    if response.clicked() && !touch_editing {
+        ui.memory_mut(|memory| memory.request_focus(response.id));
+    }
+
+    (response, truncated, value.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_number(text: &str) -> Option<f32> {
+    text.chars()
+        .filter(|character| !character.is_whitespace())
+        .map(|character| if character == '−' { '-' } else { character })
+        .collect::<String>()
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite())
 }

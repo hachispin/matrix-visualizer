@@ -31,6 +31,9 @@ mod shapes;
 mod ui;
 mod utils;
 
+#[cfg(target_arch = "wasm32")]
+mod web_input;
+
 use anyhow::Result;
 use three_d::{
     Camera,
