@@ -1,7 +1,9 @@
 //! Editable polygons, sequential outlines, and triangulated translucent interiors.
 
+use std::collections::BTreeSet;
+
 use anyhow::Result;
-use three_d::{ColorMaterial, Context, Gm, Mat3, Mesh, Srgba, Vec3, Vector3, vec3};
+use three_d::{ColorMaterial, Context, Gm, Mat3, Mesh, Srgba, Vec3, Vector3, Zero};
 
 use crate::{grid, palette, utils};
 
@@ -15,6 +17,7 @@ pub struct Vertex {
 pub struct Polygon {
     pub id: usize,
     pub vertices: Vec<Vertex>,
+    pub faces: Vec<Vec<usize>>,
     pub hidden: bool,
 }
 
@@ -22,15 +25,12 @@ impl Default for Polygon {
     fn default() -> Self {
         Self {
             id: 0,
-            vertices: [
-                vec3(-1.0, -1.0, 0.0),
-                vec3(1.0, -1.0, 0.0),
-                vec3(0.0, 1.0, 0.0),
-            ]
-            .into_iter()
-            .enumerate()
-            .map(|(id, position)| Vertex { id, position })
-            .collect(),
+            vertices: [Vec3::zero(); 3]
+                .into_iter()
+                .enumerate()
+                .map(|(id, position)| Vertex { id, position })
+                .collect(),
+            faces: Vec::new(),
             hidden: false,
         }
     }
@@ -38,6 +38,73 @@ impl Default for Polygon {
 
 impl Polygon {
     pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
+
+    pub fn make_unit_cube(&mut self) {
+        self.vertices = [
+            Vec3::new(-0.5, -0.5, -0.5),
+            Vec3::new(0.5, -0.5, -0.5),
+            Vec3::new(0.5, 0.5, -0.5),
+            Vec3::new(-0.5, 0.5, -0.5),
+            Vec3::new(-0.5, -0.5, 0.5),
+            Vec3::new(0.5, -0.5, 0.5),
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(-0.5, 0.5, 0.5),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(id, position)| Vertex { id, position })
+        .collect();
+        self.faces = [
+            [0, 3, 2, 1],
+            [4, 5, 6, 7],
+            [0, 1, 5, 4],
+            [1, 2, 6, 5],
+            [2, 3, 7, 6],
+            [3, 0, 4, 7],
+        ]
+        .into_iter()
+        .map(Vec::from)
+        .collect();
+    }
+
+    fn triangles(&self) -> Vec<[usize; 3]> {
+        if self.faces.is_empty() {
+            return triangulate(&self.vertices);
+        }
+
+        self.faces
+            .iter()
+            .flat_map(|face| {
+                let vertices: Vec<_> = face
+                    .iter()
+                    .map(|&index| self.vertices[index].clone())
+                    .collect();
+
+                triangulate(&vertices)
+                    .into_iter()
+                    .map(|triangle| triangle.map(|index| face[index]))
+            })
+            .collect()
+    }
+
+    fn edges(&self) -> Vec<(usize, usize)> {
+        if self.faces.is_empty() {
+            return (0..self.vertices.len())
+                .map(|index| (index, (index + 1) % self.vertices.len()))
+                .collect();
+        }
+
+        self.faces
+            .iter()
+            .flat_map(|face| {
+                face.iter()
+                    .zip(face.iter().cycle().skip(1))
+                    .map(|(&start, &end)| (start.min(end), start.max(end)))
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
 }
 
 struct RenderedPolygon {
@@ -114,7 +181,7 @@ impl Polygons {
             let mut fill_positions = Vec::new();
             let mut fill_indices = Vec::new();
 
-            for triangle in triangulate(&polygon.vertices) {
+            for triangle in polygon.triangles() {
                 let clipped = clip_triangle(triangle.map(|index| positions[index]));
 
                 if clipped.len() < 3 {
@@ -139,8 +206,8 @@ impl Polygons {
             let mut outline_positions = Vec::new();
             let mut outline_indices = Vec::new();
 
-            for (&start, &end) in positions.iter().zip(positions.iter().cycle().skip(1)) {
-                if let Some((start, end)) = utils::clip_edge(start, end) {
+            for (start, end) in polygon.edges() {
+                if let Some((start, end)) = utils::clip_edge(positions[start], positions[end]) {
                     utils::append_edge(&mut outline_positions, &mut outline_indices, start, end)?;
                 }
             }

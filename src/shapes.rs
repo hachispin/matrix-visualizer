@@ -11,7 +11,7 @@ use three_d::{
     Mesh,
     Srgba,
     Vec3,
-    vec3,
+    Zero,
 };
 
 use crate::{grid, palette, utils};
@@ -28,7 +28,7 @@ impl Default for Point {
     fn default() -> Self {
         Self {
             id: 0,
-            position: vec3(1.0, 1.0, 1.0),
+            position: Vec3::zero(),
             hidden: false,
         }
     }
@@ -49,7 +49,7 @@ impl Default for LineSegment {
     fn default() -> Self {
         Self {
             id: 0,
-            endpoints: (vec3(-1.0, -1.0, 0.0), vec3(1.0, 1.0, 0.0)),
+            endpoints: (Vec3::zero(), Vec3::zero()),
             hidden: false,
         }
     }

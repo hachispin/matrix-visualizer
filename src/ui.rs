@@ -390,16 +390,24 @@ impl Ui {
     }
 
     fn polygon_controls(&mut self, ui: &mut egui::Ui, target: Mat3) {
+        ui.heading("Polygons");
+
         ui.horizontal_wrapped(|ui| {
-            ui.heading("Polygons");
+            let add_polygon = ui.button("Add a polygon").clicked();
+            let add_cube = ui.button("Add unit cube").clicked();
 
-            if ui.button("Add a polygon").clicked() {
+            if add_polygon || add_cube {
                 let id = available_id(self.polygons.iter().map(|polygon| polygon.id));
-
-                self.polygons.push(Polygon {
+                let mut polygon = Polygon {
                     id,
                     ..Polygon::default()
-                });
+                };
+
+                if add_cube {
+                    polygon.make_unit_cube();
+                }
+
+                self.polygons.push(polygon);
                 self.polygons.sort_by_key(|polygon| polygon.id);
             }
         });
@@ -634,6 +642,7 @@ impl Ui {
                 });
             });
 
+            let sequential = polygon.faces.is_empty();
             let mut remove_vertex = None;
 
             for (index, vertex) in polygon.vertices.iter_mut().enumerate() {
@@ -641,7 +650,7 @@ impl Ui {
                     ui.horizontal(|ui| {
                         ui.label(format!("Vertex {}", index + 1));
 
-                        if index >= 3 {
+                        if sequential && index >= 3 {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
@@ -663,17 +672,21 @@ impl Ui {
                 polygon.vertices.remove(index);
             }
 
-            ui.label("Vertices connect in order, then back to the first.");
+            if sequential {
+                ui.label("Vertices connect in order, then back to the first.");
 
-            if ui.button("Add vertex").clicked() {
-                let id = available_id(polygon.vertices.iter().map(|vertex| vertex.id));
-                let first = polygon.vertices[0].position;
-                let last = polygon.vertices[polygon.vertices.len() - 1].position;
-                let position = Vec3::from(std::array::from_fn::<_, 3, _>(|axis| {
-                    first[axis].midpoint(last[axis])
-                }));
+                if ui.button("Add vertex").clicked() {
+                    let id = available_id(polygon.vertices.iter().map(|vertex| vertex.id));
+                    let first = polygon.vertices[0].position;
+                    let last = polygon.vertices[polygon.vertices.len() - 1].position;
+                    let position = Vec3::from(std::array::from_fn::<_, 3, _>(|axis| {
+                        first[axis].midpoint(last[axis])
+                    }));
 
-                polygon.vertices.push(Vertex { id, position });
+                    polygon.vertices.push(Vertex { id, position });
+                }
+            } else {
+                ui.label("Eight corners joined by six shaded faces.");
             }
         });
 
