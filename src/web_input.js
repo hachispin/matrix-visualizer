@@ -9,6 +9,7 @@ let gesture;
 let canvasRect;
 let scaleX = 1;
 let scaleY = 1;
+let touchPointer = false;
 
 function finish(cancelled = false) {
     if (!active) {
@@ -108,6 +109,7 @@ function initialize() {
     });
 
     canvas.addEventListener("pointerdown", (event) => {
+        touchPointer = event.pointerType === "touch";
         finish();
 
         if (event.pointerType !== "touch" || !event.isPrimary) {
@@ -183,6 +185,10 @@ export function end_frame() {
 
 export function is_editing(id) {
     return active?.id === id;
+}
+
+export function is_touch_pointer() {
+    return touchPointer;
 }
 
 export function take_value(id) {

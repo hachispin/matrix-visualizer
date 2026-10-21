@@ -266,6 +266,9 @@ impl Ui {
             frame.viewport.height as f32 / frame.device_pixel_ratio,
         );
 
+        #[cfg(target_arch = "wasm32")]
+        crate::web_input::prepare_events(&mut frame.events);
+
         gui.update(
             &mut frame.events,
             frame.accumulated_time,
@@ -538,9 +541,7 @@ impl Ui {
         let mut create_inverse = None;
 
         egui::ScrollArea::vertical()
-            .id_salt("sidebar_scroll")
             .auto_shrink([false, false])
-            .animated(false)
             .show(ui, |ui| {
                 let target = self.target_transformation();
 
