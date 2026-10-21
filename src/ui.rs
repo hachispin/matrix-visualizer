@@ -2,9 +2,12 @@
 
 use std::collections::VecDeque;
 
-use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Viewport, egui};
+use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Vec3, Viewport, egui};
 
-use crate::shapes::Point;
+use crate::{
+    polygons::{Polygon, Vertex},
+    shapes::Point,
+};
 
 const TRANSFORMATION_DURATION: f64 = 0.6;
 
@@ -42,6 +45,7 @@ struct FocusedMatrixEntry {
 
 pub struct Ui {
     pub points: Vec<Point>,
+    pub polygons: Vec<Polygon>,
     pub transformation: Mat3,
     animations: VecDeque<TransformationAnimation>,
     matrices: Vec<MatrixInput>,
@@ -52,10 +56,11 @@ pub struct Ui {
 impl Default for Ui {
     fn default() -> Self {
         Self {
-            points: vec![Point::default()],
+            points: Vec::new(),
+            polygons: Vec::new(),
             transformation: Mat3::identity(),
             animations: VecDeque::new(),
-            matrices: vec![MatrixInput::default()],
+            matrices: Vec::new(),
             focused_matrix_entry: None,
             error: None,
         }
@@ -211,12 +216,10 @@ impl Ui {
         }
     }
 
-    fn controls(&mut self, ui: &mut egui::Ui) {
-        self.focused_matrix_entry = None;
-
-        ui.heading("Matrix Visualizer");
-
+    fn point_controls(&mut self, ui: &mut egui::Ui, target: Mat3) {
         ui.horizontal_wrapped(|ui| {
+            ui.heading("Points");
+
             if ui.button("Add a point").clicked() {
                 let id = available_id(self.points.iter().map(|point| point.id));
 
@@ -227,6 +230,50 @@ impl Ui {
 
                 self.points.sort_by_key(|point| point.id);
             }
+        });
+
+        if self.points.is_empty() {
+            ui.label("Add a point and plot its coordinates.");
+        }
+
+        self.points.retain_mut(|point| {
+            ui.push_id(("point", point.id), |ui| {
+                Self::point_editor(ui, point, target)
+            })
+            .inner
+        });
+    }
+
+    fn polygon_controls(&mut self, ui: &mut egui::Ui, target: Mat3) {
+        ui.horizontal_wrapped(|ui| {
+            ui.heading("Polygons");
+
+            if ui.button("Add a polygon").clicked() {
+                let id = available_id(self.polygons.iter().map(|polygon| polygon.id));
+
+                self.polygons.push(Polygon {
+                    id,
+                    ..Polygon::default()
+                });
+                self.polygons.sort_by_key(|polygon| polygon.id);
+            }
+        });
+
+        if self.polygons.is_empty() {
+            ui.label("Add a polygon to connect and shade its vertices.");
+        }
+
+        self.polygons.retain_mut(|polygon| {
+            ui.push_id(("polygon", polygon.id), |ui| {
+                Self::polygon_editor(ui, polygon, target)
+            })
+            .inner
+        });
+    }
+
+    fn matrix_buttons(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.heading("Matrices");
 
             if ui.button("Add a matrix").clicked() {
                 let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
@@ -239,8 +286,6 @@ impl Ui {
             }
         });
 
-        ui.separator();
-
         if ui.button("Reset transformations").clicked() {
             self.animations.clear();
             self.queue_transformation(Mat3::identity(), ui.input(|input| input.time));
@@ -250,7 +295,12 @@ impl Ui {
         if let Some(error) = &self.error {
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
+    }
 
+    fn controls(&mut self, ui: &mut egui::Ui) {
+        self.focused_matrix_entry = None;
+
+        ui.heading("Matrix Visualizer");
         ui.separator();
 
         let mut apply = None;
@@ -259,23 +309,17 @@ impl Ui {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                ui.heading("Points");
-
-                if self.points.is_empty() {
-                    ui.label("Add a point and plot its coordinates.");
-                }
-
                 let target = self.target_transformation();
 
-                self.points.retain_mut(|point| {
-                    ui.push_id(("point", point.id), |ui| {
-                        Self::point_editor(ui, point, target)
-                    })
-                    .inner
-                });
+                self.point_controls(ui, target);
 
                 ui.add_space(12.0);
-                ui.heading("Matrices");
+                ui.separator();
+                self.polygon_controls(ui, target);
+
+                ui.add_space(12.0);
+                ui.separator();
+                self.matrix_buttons(ui);
 
                 self.matrices.retain_mut(|matrix| {
                     ui.push_id(("matrix", matrix.id), |ui| {
@@ -319,12 +363,20 @@ impl Ui {
         if let Some(matrix) = apply {
             let candidate = matrix * self.target_transformation();
             let entries: &[[_; 3]; 3] = candidate.as_ref();
-            let finite = entries.iter().flatten().all(|value| value.is_finite())
-                && self.points.iter().all(|point| {
-                    let image = candidate * point.position;
+            let finite =
+                entries.iter().flatten().all(|value| value.is_finite())
+                    && self
+                        .points
+                        .iter()
+                        .map(|point| point.position)
+                        .chain(self.polygons.iter().flat_map(|polygon| {
+                            polygon.vertices.iter().map(|vertex| vertex.position)
+                        }))
+                        .all(|position| {
+                            let image = candidate * position;
 
-                    [image.x, image.y, image.z].into_iter().all(f32::is_finite)
-                });
+                            [image.x, image.y, image.z].into_iter().all(f32::is_finite)
+                        });
 
             if finite {
                 self.queue_transformation(candidate, ui.input(|input| input.time));
@@ -355,37 +407,74 @@ impl Ui {
                 });
             });
 
-            let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+            coordinate_editor(ui, &mut point.position, transformation);
+        });
 
+        ui.add_space(6.0);
+
+        !remove
+    }
+
+    fn polygon_editor(ui: &mut egui::Ui, polygon: &mut Polygon, transformation: Mat3) -> bool {
+        let mut remove = false;
+
+        egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
-                for (axis, coordinate) in [
-                    ("x", &mut point.position.x),
-                    ("y", &mut point.position.y),
-                    ("z", &mut point.position.z),
-                ] {
-                    ui.add_sized(
-                        [width, 24.0],
-                        number_input(coordinate, &format!("{axis}: ")),
-                    );
-                }
-            });
+                let color = polygon.color();
 
-            let mut result = transformation * point.position;
+                ui.colored_label(
+                    egui::Color32::from_rgb(color.r, color.g, color.b),
+                    format!("Polygon {}", polygon.id + 1),
+                );
 
-            ui.add_enabled_ui(false, |ui| {
-                ui.horizontal(|ui| {
-                    for (axis, coordinate) in [
-                        ("x′", &mut result.x),
-                        ("y′", &mut result.y),
-                        ("z′", &mut result.z),
-                    ] {
-                        ui.add_sized(
-                            [width, 24.0],
-                            number_input(coordinate, &format!("{axis}: ")),
-                        );
-                    }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    remove = ui.button("Remove").clicked();
+
+                    ui.checkbox(&mut polygon.hidden, "Hide");
                 });
             });
+
+            let mut remove_vertex = None;
+
+            for (index, vertex) in polygon.vertices.iter_mut().enumerate() {
+                ui.push_id(vertex.id, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Vertex {}", index + 1));
+
+                        if index >= 3 {
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("Remove vertex").clicked() {
+                                        remove_vertex = Some(index);
+                                    }
+                                },
+                            );
+                        }
+                    });
+
+                    coordinate_editor(ui, &mut vertex.position, transformation);
+                });
+
+                ui.add_space(4.0);
+            }
+
+            if let Some(index) = remove_vertex {
+                polygon.vertices.remove(index);
+            }
+
+            ui.label("Vertices connect in order, then back to the first.");
+
+            if ui.button("Add vertex").clicked() {
+                let id = available_id(polygon.vertices.iter().map(|vertex| vertex.id));
+                let first = polygon.vertices[0].position;
+                let last = polygon.vertices[polygon.vertices.len() - 1].position;
+                let position = Vec3::from(std::array::from_fn::<_, 3, _>(|axis| {
+                    first[axis].midpoint(last[axis])
+                }));
+
+                polygon.vertices.push(Vertex { id, position });
+            }
         });
 
         ui.add_space(6.0);
@@ -455,6 +544,40 @@ impl Ui {
             action
         }
     }
+}
+
+fn coordinate_editor(ui: &mut egui::Ui, position: &mut Vec3, transformation: Mat3) {
+    let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+
+    ui.horizontal(|ui| {
+        for (axis, coordinate) in [
+            ("x", &mut position.x),
+            ("y", &mut position.y),
+            ("z", &mut position.z),
+        ] {
+            ui.add_sized(
+                [width, 24.0],
+                number_input(coordinate, &format!("{axis}: ")),
+            );
+        }
+    });
+
+    let mut result = transformation * *position;
+
+    ui.add_enabled_ui(false, |ui| {
+        ui.horizontal(|ui| {
+            for (axis, coordinate) in [
+                ("x′", &mut result.x),
+                ("y′", &mut result.y),
+                ("z′", &mut result.z),
+            ] {
+                ui.add_sized(
+                    [width, 24.0],
+                    number_input(coordinate, &format!("{axis}: ")),
+                );
+            }
+        });
+    });
 }
 
 fn available_id(ids: impl Iterator<Item = usize>) -> usize {

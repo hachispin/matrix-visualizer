@@ -26,6 +26,7 @@ mod graph;
 mod grid;
 mod labels;
 mod palette;
+mod polygons;
 mod shapes;
 mod ui;
 mod utils;

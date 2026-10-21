@@ -9,6 +9,7 @@ use crate::{
     grid,
     labels::Labels,
     palette,
+    polygons::{Polygon, Polygons},
     shapes::{Point, Points},
     ui::Ui,
     utils,
@@ -21,6 +22,7 @@ struct State {
     magnification: f32,
     heading: u32,
     points: Vec<Point>,
+    polygons: Vec<Polygon>,
     transformation: Mat3,
     animation_endpoints: Option<(Mat3, Mat3)>,
 }
@@ -32,6 +34,7 @@ impl Default for State {
             magnification: 1.0,
             heading: 0,
             points: Vec::new(),
+            polygons: Vec::new(),
             transformation: Mat3::identity(),
             animation_endpoints: None,
         }
@@ -45,6 +48,8 @@ pub struct Graph {
     origin_visible: bool,
     points: Points,
     animation_points: [Points; 2],
+    polygons: Polygons,
+    animation_polygons: [Polygons; 2],
     state: State,
 }
 
@@ -73,6 +78,8 @@ impl Graph {
             origin_visible: true,
             points: Points::default(),
             animation_points: std::array::from_fn(|_| Points::translucent()),
+            polygons: Polygons::default(),
+            animation_polygons: std::array::from_fn(|_| Polygons::translucent()),
             state: State {
                 heading: camera_heading(camera),
                 ..Default::default()
@@ -98,6 +105,7 @@ impl Graph {
         let animation_endpoints = ui.animation_endpoints();
         let endpoints_changed = animation_endpoints != self.state.animation_endpoints;
         let points_changed = ui.points != self.state.points;
+        let polygons_changed = ui.polygons != self.state.polygons;
         let heading = camera_heading(camera);
 
         if zoom_changed {
@@ -135,6 +143,19 @@ impl Graph {
             }
         }
 
+        if polygons_changed || view_changed || matrix_changed {
+            self.polygons
+                .update(ctx, &ui.polygons, ui.transformation, centre, magnification)?;
+        }
+
+        if (polygons_changed || view_changed || endpoints_changed)
+            && let Some((start, end)) = animation_endpoints
+        {
+            for (polygons, transformation) in self.animation_polygons.iter_mut().zip([start, end]) {
+                polygons.update(ctx, &ui.polygons, transformation, centre, magnification)?;
+            }
+        }
+
         self.state.centre = centre;
         self.state.magnification = magnification;
         self.state.heading = heading;
@@ -145,6 +166,10 @@ impl Graph {
             self.state.points.clone_from(&ui.points);
         }
 
+        if polygons_changed {
+            self.state.polygons.clone_from(&ui.polygons);
+        }
+
         Ok(())
     }
 
@@ -152,11 +177,18 @@ impl Graph {
         iter::once(&self.grid)
             .chain(self.origin_visible.then_some(&self.origin))
             .chain(self.points.objects())
+            .chain(self.polygons.objects())
             .chain(
                 self.animation_points
                     .iter()
                     .filter(|_| self.state.animation_endpoints.is_some())
                     .flat_map(Points::objects),
+            )
+            .chain(
+                self.animation_polygons
+                    .iter()
+                    .filter(|_| self.state.animation_endpoints.is_some())
+                    .flat_map(Polygons::objects),
             )
             .chain(self.labels.objects())
     }
