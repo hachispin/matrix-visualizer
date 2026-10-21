@@ -258,12 +258,22 @@ impl Ui {
                 }
             });
 
-            let result = transformation * point.position;
+            let mut result = transformation * point.position;
 
-            ui.small(format!(
-                "Result: ({:.3}, {:.3}, {:.3})",
-                result.x, result.y, result.z
-            ));
+            ui.add_enabled_ui(false, |ui| {
+                ui.horizontal(|ui| {
+                    for (axis, coordinate) in [
+                        ("x′", &mut result.x),
+                        ("y′", &mut result.y),
+                        ("z′", &mut result.z),
+                    ] {
+                        ui.add_sized(
+                            [width, 24.0],
+                            number_input(coordinate).prefix(format!("{axis}: ")),
+                        );
+                    }
+                });
+            });
         });
 
         ui.add_space(6.0);
