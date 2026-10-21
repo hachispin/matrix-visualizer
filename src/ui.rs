@@ -238,7 +238,8 @@ impl Ui {
                 );
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    remove = ui.small_button("Remove").clicked();
+                    remove = ui.button("Remove").clicked();
+
                     ui.checkbox(&mut point.hidden, "Hide");
                 });
             });
@@ -294,7 +295,7 @@ impl Ui {
                 ui.strong(format!("Matrix #{} (3×3)", matrix.id + 1));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    remove = ui.small_button("Remove").clicked();
+                    remove = ui.button("Remove").clicked();
                 });
             });
 
