@@ -245,8 +245,14 @@ impl Ui {
         if let Some(matrix) = apply {
             let candidate = matrix * self.transformation;
             let entries: &[[_; 3]; 3] = candidate.as_ref();
+            let finite = entries.iter().flatten().all(|value| value.is_finite())
+                && self.points.iter().all(|point| {
+                    let image = candidate * point.position;
 
-            if entries.iter().flatten().all(|value| value.is_finite()) {
+                    [image.x, image.y, image.z].into_iter().all(f32::is_finite)
+                });
+
+            if finite {
                 self.transformation = candidate;
                 self.error = None;
             } else {
@@ -437,8 +443,12 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
                     .map(|character| if character == '−' { '-' } else { character })
                     .collect();
 
-                if let Ok(parsed) = normalized.parse() {
-                    *value = parsed;
+                if let Ok(parsed) = normalized.parse::<f32>() {
+                    if parsed.is_finite() {
+                        *value = parsed;
+                    } else {
+                        text = value.to_string();
+                    }
                 }
             }
 
