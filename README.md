@@ -28,6 +28,6 @@ As of 20/10/2026, looks like this: ![Screenshot of the program, showing the grid
 - [x] Transforming
   - [ ] Toggle for whether the grid itself is affected by transformations
   - [ ] Should the camera “follow” the transformation?
-  - [ ] Animated with some easing function
+  - [x] Animated with some easing function
 
 </details>

@@ -1,8 +1,18 @@
 //! Sidebar editors for points and 3×3 linear transformations.
 
+use std::collections::VecDeque;
+
 use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Viewport, egui};
 
 use crate::shapes::Point;
+
+const TRANSFORMATION_DURATION: f64 = 0.6;
+
+struct TransformationAnimation {
+    from: Mat3,
+    to: Mat3,
+    started_at: f64,
+}
 
 struct MatrixInput {
     id: usize,
@@ -33,6 +43,7 @@ struct FocusedMatrixEntry {
 pub struct Ui {
     pub points: Vec<Point>,
     pub transformation: Mat3,
+    animations: VecDeque<TransformationAnimation>,
     matrices: Vec<MatrixInput>,
     focused_matrix_entry: Option<FocusedMatrixEntry>,
     error: Option<String>,
@@ -43,6 +54,7 @@ impl Default for Ui {
         Self {
             points: vec![Point::default()],
             transformation: Mat3::identity(),
+            animations: VecDeque::new(),
             matrices: vec![MatrixInput::default()],
             focused_matrix_entry: None,
             error: None,
@@ -71,6 +83,8 @@ impl Ui {
     }
 
     pub fn update(&mut self, gui: &mut GUI, frame: &mut FrameInput) -> Viewport {
+        self.advance_animation(frame.accumulated_time * 0.001);
+
         // go to the next entry if a comma is typed
         if let Some(entry) = self.focused_matrix_entry
             && gui.context().memory(egui::Memory::focused) == Some(entry.id)
@@ -118,6 +132,63 @@ impl Ui {
         );
 
         graph_viewport
+    }
+
+    fn target_transformation(&self) -> Mat3 {
+        self.animations
+            .back()
+            .map_or(self.transformation, |animation| animation.to)
+    }
+
+    pub fn animation_endpoints(&self) -> Option<(Mat3, Mat3)> {
+        self.animations
+            .front()
+            .map(|animation| (animation.from, animation.to))
+    }
+
+    fn queue_transformation(&mut self, to: Mat3, time: f64) {
+        let (from, started_at) = self
+            .animations
+            .back()
+            .map_or((self.transformation, time), |animation| {
+                (animation.to, animation.started_at + TRANSFORMATION_DURATION)
+            });
+
+        if from != to {
+            self.animations.push_back(TransformationAnimation {
+                from,
+                to,
+                started_at,
+            });
+        }
+    }
+
+    fn advance_animation(&mut self, time: f64) {
+        while let Some(animation) = self.animations.front() {
+            let progress =
+                ((time - animation.started_at) / TRANSFORMATION_DURATION).clamp(0.0, 1.0);
+
+            if progress >= 1.0 {
+                self.transformation = animation.to;
+                self.animations.pop_front();
+
+                continue;
+            }
+
+            let eased = progress * progress * (3.0 - 2.0 * progress);
+
+            for column in 0..3 {
+                for row in 0..3 {
+                    let from = f64::from(animation.from[column][row]);
+                    let to = f64::from(animation.to[column][row]);
+
+                    // Widen before interpolation so opposite large values cannot overflow.
+                    self.transformation[column][row] = (from + (to - from) * eased) as f32;
+                }
+            }
+
+            break;
+        }
     }
 
     fn show(&mut self, ui: &mut egui::Ui, viewport: Viewport, pixel_ratio: f32) -> Viewport {
@@ -171,7 +242,8 @@ impl Ui {
         ui.separator();
 
         if ui.button("Reset transformations").clicked() {
-            self.transformation = Mat3::identity();
+            self.animations.clear();
+            self.queue_transformation(Mat3::identity(), ui.input(|input| input.time));
             self.error = None;
         }
 
@@ -193,9 +265,11 @@ impl Ui {
                     ui.label("Add a point and plot its coordinates.");
                 }
 
+                let target = self.target_transformation();
+
                 self.points.retain_mut(|point| {
                     ui.push_id(("point", point.id), |ui| {
-                        Self::point_editor(ui, point, self.transformation)
+                        Self::point_editor(ui, point, target)
                     })
                     .inner
                 });
@@ -243,7 +317,7 @@ impl Ui {
         }
 
         if let Some(matrix) = apply {
-            let candidate = matrix * self.transformation;
+            let candidate = matrix * self.target_transformation();
             let entries: &[[_; 3]; 3] = candidate.as_ref();
             let finite = entries.iter().flatten().all(|value| value.is_finite())
                 && self.points.iter().all(|point| {
@@ -253,7 +327,7 @@ impl Ui {
                 });
 
             if finite {
-                self.transformation = candidate;
+                self.queue_transformation(candidate, ui.input(|input| input.time));
                 self.error = None;
             } else {
                 self.error = Some("Produced values are too large to plot!".to_owned());
@@ -407,9 +481,11 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
         let id = ui.next_auto_id();
         let edit_id = id.with("number_text");
         let text_style = ui.style().drag_value_text_style.clone();
+        let buffer = ui.data_mut(|data| data.remove_temp::<String>(edit_id));
+        let editing =
+            ui.is_enabled() && (ui.memory(|memory| memory.has_focus(id)) || buffer.is_some());
 
-        let (response, truncated) = if ui.is_enabled() && ui.memory(|memory| memory.has_focus(id)) {
-            let buffer = ui.data_mut(|data| data.remove_temp::<String>(edit_id));
+        let (response, truncated, full_text) = if editing {
             let start_editing = buffer.is_none();
             let mut text = buffer.unwrap_or_else(|| value.to_string());
 
@@ -434,9 +510,11 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
                 .show(ui);
 
             let truncated = output.galley.size().x > output.text_clip_rect.width();
-            let response = output.response.response;
+            let mut response = output.response.response;
+            let finished = !response.has_focus() || response.clicked_elsewhere();
+            let cancelled = ui.input(|input| input.key_pressed(egui::Key::Escape));
 
-            if response.changed() {
+            if !cancelled && (response.changed() || finished) {
                 let normalized: String = text
                     .chars()
                     .filter(|character| !character.is_whitespace())
@@ -445,21 +523,24 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
 
                 if let Ok(parsed) = normalized.parse::<f32>() {
                     if parsed.is_finite() {
-                        *value = parsed;
+                        if finished {
+                            *value = parsed;
+                            response.mark_changed();
+                        }
                     } else {
                         text = value.to_string();
                     }
                 }
             }
 
-            if response.has_focus() {
-                ui.data_mut(|data| data.insert_temp(edit_id, text));
+            if finished {
+                ui.memory_mut(|memory| memory.surrender_focus(id));
+            } else {
+                ui.data_mut(|data| data.insert_temp(edit_id, text.clone()));
             }
 
-            (response, truncated)
+            (response, truncated, text)
         } else {
-            ui.data_mut(|data| data.remove::<String>(edit_id));
-
             let font = text_style.resolve(ui.style());
             let color = ui.visuals().text_color();
             let width = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
@@ -505,13 +586,13 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
                 ui.memory_mut(|memory| memory.request_focus(response.id));
             }
 
-            (response, truncated)
+            (response, truncated, value.to_string())
         };
 
         if truncated {
             response
-                .on_hover_text(value.to_string())
-                .on_disabled_hover_text(value.to_string())
+                .on_hover_text(full_text.clone())
+                .on_disabled_hover_text(full_text)
         } else {
             response
         }

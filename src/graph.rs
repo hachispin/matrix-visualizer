@@ -22,6 +22,7 @@ struct State {
     heading: u32,
     points: Vec<Point>,
     transformation: Mat3,
+    animation_endpoints: Option<(Mat3, Mat3)>,
 }
 
 impl Default for State {
@@ -32,6 +33,7 @@ impl Default for State {
             heading: 0,
             points: Vec::new(),
             transformation: Mat3::identity(),
+            animation_endpoints: None,
         }
     }
 }
@@ -42,6 +44,7 @@ pub struct Graph {
     origin: Gm<Mesh, ColorMaterial>,
     origin_visible: bool,
     points: Points,
+    animation_points: [Points; 2],
     state: State,
 }
 
@@ -69,6 +72,7 @@ impl Graph {
             origin,
             origin_visible: true,
             points: Points::default(),
+            animation_points: std::array::from_fn(|_| Points::translucent()),
             state: State {
                 heading: camera_heading(camera),
                 ..Default::default()
@@ -91,6 +95,8 @@ impl Graph {
         let zoom_changed = magnification.to_bits() != self.state.magnification.to_bits();
         let view_changed = zoom_changed || centre != self.state.centre;
         let matrix_changed = ui.transformation != self.state.transformation;
+        let animation_endpoints = ui.animation_endpoints();
+        let endpoints_changed = animation_endpoints != self.state.animation_endpoints;
         let points_changed = ui.points != self.state.points;
         let heading = camera_heading(camera);
 
@@ -121,10 +127,19 @@ impl Graph {
                 .update(ctx, &ui.points, ui.transformation, centre, magnification);
         }
 
+        if (points_changed || view_changed || endpoints_changed)
+            && let Some((start, end)) = animation_endpoints
+        {
+            for (points, transformation) in self.animation_points.iter_mut().zip([start, end]) {
+                points.update(ctx, &ui.points, transformation, centre, magnification);
+            }
+        }
+
         self.state.centre = centre;
         self.state.magnification = magnification;
         self.state.heading = heading;
         self.state.transformation = ui.transformation;
+        self.state.animation_endpoints = animation_endpoints;
 
         if points_changed {
             self.state.points.clone_from(&ui.points);
@@ -137,6 +152,12 @@ impl Graph {
         iter::once(&self.grid)
             .chain(self.origin_visible.then_some(&self.origin))
             .chain(self.points.objects())
+            .chain(
+                self.animation_points
+                    .iter()
+                    .filter(|_| self.state.animation_endpoints.is_some())
+                    .flat_map(Points::objects),
+            )
             .chain(self.labels.objects())
     }
 }

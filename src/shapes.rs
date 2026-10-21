@@ -1,6 +1,18 @@
 //! For shapes.
 
-use three_d::{ColorMaterial, Context, CpuMesh, Gm, Mat3, Mat4, Mesh, Srgba, Vec3, vec3};
+use three_d::{
+    ColorMaterial,
+    Context,
+    CpuMaterial,
+    CpuMesh,
+    Gm,
+    Mat3,
+    Mat4,
+    Mesh,
+    Srgba,
+    Vec3,
+    vec3,
+};
 
 use crate::{grid, palette, utils};
 
@@ -35,6 +47,7 @@ struct RenderedPoint {
 pub struct Points {
     mesh: CpuMesh,
     objects: Vec<RenderedPoint>,
+    alpha: u8,
 }
 
 impl Default for Points {
@@ -42,11 +55,19 @@ impl Default for Points {
         Self {
             mesh: CpuMesh::sphere(16),
             objects: Vec::new(),
+            alpha: 255,
         }
     }
 }
 
 impl Points {
+    pub fn translucent() -> Self {
+        Self {
+            alpha: 80,
+            ..Self::default()
+        }
+    }
+
     /// Update explicitly when point data or its graph-to-world mapping changes.
     pub fn update(
         &mut self,
@@ -67,9 +88,15 @@ impl Points {
                 .iter()
                 .position(|object| object.id == point.id)
                 .unwrap_or_else(|| {
+                    let material = if self.alpha < 255 {
+                        ColorMaterial::new_transparent(ctx, &CpuMaterial::default())
+                    } else {
+                        ColorMaterial::default()
+                    };
+
                     self.objects.push(RenderedPoint {
                         id: point.id,
-                        object: Gm::new(Mesh::new(ctx, &self.mesh), ColorMaterial::default()),
+                        object: Gm::new(Mesh::new(ctx, &self.mesh), material),
                         hidden: true,
                     });
 
@@ -84,6 +111,7 @@ impl Points {
 
             if !rendered.hidden {
                 rendered.object.material.color = point.color();
+                rendered.object.material.color.a = self.alpha;
                 rendered.object.set_transformation(
                     Mat4::from_translation(position) * Mat4::from_scale(RADIUS),
                 );
