@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Vec3, Viewport, egui};
+use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Vec3, Viewport, degrees, egui};
 
 use crate::{
     polygons::{Polygon, Vertex},
@@ -17,9 +17,35 @@ struct TransformationAnimation {
     started_at: f64,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MatrixPreset {
+    Identity,
+    Scale,
+    RotateX,
+    RotateY,
+    RotateZ,
+    Custom,
+}
+
+impl MatrixPreset {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Identity => "Identity",
+            Self::Scale => "Scale",
+            Self::RotateX => "Rotate about X",
+            Self::RotateY => "Rotate about Y",
+            Self::RotateZ => "Rotate about Z",
+            Self::Custom => "Custom",
+        }
+    }
+}
+
 struct MatrixInput {
     id: usize,
     matrix: Mat3,
+    preset: MatrixPreset,
+    scale: f32,
+    angle_degrees: f32,
 }
 
 impl Default for MatrixInput {
@@ -27,6 +53,96 @@ impl Default for MatrixInput {
         Self {
             id: 0,
             matrix: Mat3::identity(),
+            preset: MatrixPreset::Identity,
+            scale: 1.0,
+            angle_degrees: 90.0,
+        }
+    }
+}
+
+impl MatrixInput {
+    fn rebuild_preset(&mut self) {
+        let angle = self.angle_degrees.rem_euclid(360.0);
+
+        self.matrix = match self.preset {
+            MatrixPreset::Identity => Mat3::identity(),
+            MatrixPreset::Scale => {
+                Mat3::from_diagonal(Vec3::new(self.scale, self.scale, self.scale))
+            },
+            MatrixPreset::RotateX => Mat3::from_angle_x(degrees(angle)),
+            MatrixPreset::RotateY => Mat3::from_angle_y(degrees(angle)),
+            MatrixPreset::RotateZ => Mat3::from_angle_z(degrees(angle)),
+            MatrixPreset::Custom => return,
+        };
+
+        // Exact quarter turns have only zeroes and unit entries.
+        if matches!(
+            self.preset,
+            MatrixPreset::RotateX | MatrixPreset::RotateY | MatrixPreset::RotateZ
+        ) && angle % 90.0 == 0.0
+        {
+            for column in 0..3 {
+                for row in 0..3 {
+                    let value = self.matrix[column][row].round();
+                    self.matrix[column][row] = if value == 0.0 { 0.0 } else { value };
+                }
+            }
+        }
+    }
+
+    fn preset_selector(&mut self, ui: &mut egui::Ui) {
+        let previous = self.preset;
+
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Presets");
+
+            egui::ComboBox::from_id_salt("preset")
+                .selected_text(self.preset.label())
+                .width(130.0)
+                .show_ui(ui, |ui| {
+                    for preset in [
+                        MatrixPreset::Identity,
+                        MatrixPreset::Scale,
+                        MatrixPreset::RotateX,
+                        MatrixPreset::RotateY,
+                        MatrixPreset::RotateZ,
+                        MatrixPreset::Custom,
+                    ] {
+                        ui.selectable_value(&mut self.preset, preset, preset.label());
+                    }
+                });
+        });
+
+        if self.preset != previous {
+            self.rebuild_preset();
+        }
+    }
+
+    fn preset_parameter(&mut self, ui: &mut egui::Ui) {
+        let parameter = match self.preset {
+            MatrixPreset::Scale => Some(("Scale factor", &mut self.scale)),
+            MatrixPreset::RotateX | MatrixPreset::RotateY | MatrixPreset::RotateZ => {
+                Some(("Degrees", &mut self.angle_degrees))
+            },
+            MatrixPreset::Identity | MatrixPreset::Custom => None,
+        };
+
+        if let Some((label, value)) = parameter {
+            let changed = ui
+                .push_id("preset_parameter", |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(label);
+
+                        ui.add_sized([90.0, 24.0], number_input(value, ""))
+                            .changed()
+                    })
+                    .inner
+                })
+                .inner;
+
+            if changed {
+                self.rebuild_preset();
+            }
         }
     }
 }
@@ -315,6 +431,10 @@ impl Ui {
             }
         });
 
+        if self.matrices.is_empty() {
+            ui.label("Add a matrix and apply it to transform your shapes.");
+        }
+
         if ui.button("Reset transformations").clicked() {
             self.animations.clear();
             self.queue_transformation(Mat3::identity(), ui.input(|input| input.time));
@@ -385,7 +505,12 @@ impl Ui {
             if let Some(matrix) = inverse {
                 let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
 
-                self.matrices.push(MatrixInput { id, matrix });
+                self.matrices.push(MatrixInput {
+                    id,
+                    matrix,
+                    preset: MatrixPreset::Custom,
+                    ..MatrixInput::default()
+                });
                 self.matrices.sort_by_key(|matrix| matrix.id);
                 self.error = None;
             } else {
@@ -574,7 +699,10 @@ impl Ui {
                 });
             });
 
+            matrix.preset_selector(ui);
+
             let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+            let mut edited = false;
 
             egui::Grid::new("entries").num_columns(3).show(ui, |ui| {
                 for row in 0..3 {
@@ -583,6 +711,7 @@ impl Ui {
                             [width, 24.0],
                             number_input(&mut matrix.matrix[column][row], ""),
                         );
+                        edited |= response.changed();
 
                         if response.has_focus() {
                             *focused_entry = Some(FocusedMatrixEntry {
@@ -596,11 +725,13 @@ impl Ui {
                 }
             });
 
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Set to identity").clicked() {
-                    matrix.matrix = Mat3::identity();
-                }
+            if edited {
+                matrix.preset = MatrixPreset::Custom;
+            }
 
+            matrix.preset_parameter(ui);
+
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("Apply").clicked() {
                     action = Some(MatrixAction::Apply);
                 }
