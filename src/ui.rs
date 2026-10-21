@@ -2,7 +2,20 @@
 
 use std::collections::VecDeque;
 
-use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Vec3, Viewport, degrees, egui};
+use three_d::{
+    Event,
+    FrameInput,
+    GUI,
+    Key,
+    Mat3,
+    MouseButton,
+    PhysicalPoint,
+    SquareMatrix,
+    Vec3,
+    Viewport,
+    degrees,
+    egui,
+};
 
 use crate::{
     polygons::{Polygon, Vertex},
@@ -167,6 +180,7 @@ pub struct Ui {
     animations: VecDeque<TransformationAnimation>,
     matrices: Vec<MatrixInput>,
     focused_matrix_entry: Option<FocusedMatrixEntry>,
+    sidebar_dragging: bool,
     error: Option<String>,
 }
 
@@ -180,6 +194,7 @@ impl Default for Ui {
             animations: VecDeque::new(),
             matrices: Vec::new(),
             focused_matrix_entry: None,
+            sidebar_dragging: false,
             error: None,
         }
     }
@@ -254,7 +269,56 @@ impl Ui {
             },
         );
 
+        self.capture_sidebar_input(&mut frame.events, graph_viewport);
+
         graph_viewport
+    }
+
+    fn capture_sidebar_input(&mut self, events: &mut [Event], viewport: Viewport) {
+        let inside_plot = |position: PhysicalPoint| {
+            position.x >= viewport.x as f32
+                && position.x < viewport.x as f32 + viewport.width as f32
+                && position.y >= viewport.y as f32
+                && position.y < viewport.y as f32 + viewport.height as f32
+        };
+
+        for event in events {
+            match event {
+                Event::MousePress {
+                    button: MouseButton::Left,
+                    position,
+                    handled,
+                    ..
+                } => {
+                    self.sidebar_dragging = *handled || !inside_plot(*position);
+                    *handled |= self.sidebar_dragging;
+                },
+                Event::MouseRelease {
+                    button: MouseButton::Left,
+                    position,
+                    handled,
+                    ..
+                } => {
+                    *handled |= self.sidebar_dragging || !inside_plot(*position);
+                    self.sidebar_dragging = false;
+                },
+                Event::MouseMotion {
+                    position, handled, ..
+                }
+                | Event::MouseWheel {
+                    position, handled, ..
+                }
+                | Event::PinchGesture {
+                    position, handled, ..
+                }
+                | Event::RotationGesture {
+                    position, handled, ..
+                } => {
+                    *handled |= self.sidebar_dragging || !inside_plot(*position);
+                },
+                _ => {},
+            }
+        }
     }
 
     fn target_transformation(&self) -> Mat3 {
