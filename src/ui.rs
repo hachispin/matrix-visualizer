@@ -177,7 +177,7 @@ impl Ui {
 
         let mut apply = None;
 
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.heading("Points");
