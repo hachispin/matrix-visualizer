@@ -6,7 +6,7 @@ use three_d::{Event, FrameInput, GUI, Key, Mat3, SquareMatrix, Vec3, Viewport, e
 
 use crate::{
     polygons::{Polygon, Vertex},
-    shapes::Point,
+    shapes::{LineSegment, Point},
 };
 
 const TRANSFORMATION_DURATION: f64 = 0.6;
@@ -45,6 +45,7 @@ struct FocusedMatrixEntry {
 
 pub struct Ui {
     pub points: Vec<Point>,
+    pub segments: Vec<LineSegment>,
     pub polygons: Vec<Polygon>,
     pub transformation: Mat3,
     animations: VecDeque<TransformationAnimation>,
@@ -57,6 +58,7 @@ impl Default for Ui {
     fn default() -> Self {
         Self {
             points: Vec::new(),
+            segments: Vec::new(),
             polygons: Vec::new(),
             transformation: Mat3::identity(),
             animations: VecDeque::new(),
@@ -244,6 +246,33 @@ impl Ui {
         });
     }
 
+    fn segment_controls(&mut self, ui: &mut egui::Ui, target: Mat3) {
+        ui.horizontal_wrapped(|ui| {
+            ui.heading("Line segments");
+
+            if ui.button("Add a line segment").clicked() {
+                let id = available_id(self.segments.iter().map(|segment| segment.id));
+
+                self.segments.push(LineSegment {
+                    id,
+                    ..LineSegment::default()
+                });
+                self.segments.sort_by_key(|segment| segment.id);
+            }
+        });
+
+        if self.segments.is_empty() {
+            ui.label("Add a line segment and edit its two endpoints.");
+        }
+
+        self.segments.retain_mut(|segment| {
+            ui.push_id(("segment", segment.id), |ui| {
+                Self::segment_editor(ui, segment, target)
+            })
+            .inner
+        });
+    }
+
     fn polygon_controls(&mut self, ui: &mut egui::Ui, target: Mat3) {
         ui.horizontal_wrapped(|ui| {
             ui.heading("Polygons");
@@ -315,6 +344,10 @@ impl Ui {
 
                 ui.add_space(12.0);
                 ui.separator();
+                self.segment_controls(ui, target);
+
+                ui.add_space(12.0);
+                ui.separator();
                 self.polygon_controls(ui, target);
 
                 ui.add_space(12.0);
@@ -369,6 +402,11 @@ impl Ui {
                         .points
                         .iter()
                         .map(|point| point.position)
+                        .chain(
+                            self.segments
+                                .iter()
+                                .flat_map(|segment| [segment.endpoints.0, segment.endpoints.1]),
+                        )
                         .chain(self.polygons.iter().flat_map(|polygon| {
                             polygon.vertices.iter().map(|vertex| vertex.position)
                         }))
@@ -408,6 +446,43 @@ impl Ui {
             });
 
             coordinate_editor(ui, &mut point.position, transformation);
+        });
+
+        ui.add_space(6.0);
+
+        !remove
+    }
+
+    fn segment_editor(ui: &mut egui::Ui, segment: &mut LineSegment, transformation: Mat3) -> bool {
+        let mut remove = false;
+
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let color = segment.color();
+
+                ui.colored_label(
+                    egui::Color32::from_rgb(color.r, color.g, color.b),
+                    format!("Segment {}", segment.id + 1),
+                );
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    remove = ui.button("Remove").clicked();
+
+                    ui.checkbox(&mut segment.hidden, "Hide");
+                });
+            });
+
+            for (label, position) in [
+                ("Start", &mut segment.endpoints.0),
+                ("End", &mut segment.endpoints.1),
+            ] {
+                ui.push_id(label, |ui| {
+                    ui.label(label);
+                    coordinate_editor(ui, position, transformation);
+                });
+
+                ui.add_space(4.0);
+            }
         });
 
         ui.add_space(6.0);

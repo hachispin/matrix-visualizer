@@ -38,6 +38,114 @@ impl Point {
     pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct LineSegment {
+    pub id: usize,
+    pub endpoints: (Vec3, Vec3),
+    pub hidden: bool,
+}
+
+impl Default for LineSegment {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            endpoints: (vec3(-1.0, -1.0, 0.0), vec3(1.0, 1.0, 0.0)),
+            hidden: false,
+        }
+    }
+}
+
+impl LineSegment {
+    pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
+}
+
+struct RenderedSegment {
+    id: usize,
+    object: Option<Gm<Mesh, ColorMaterial>>,
+}
+
+pub struct Segments {
+    objects: Vec<RenderedSegment>,
+    alpha: u8,
+}
+
+impl Default for Segments {
+    fn default() -> Self {
+        Self {
+            objects: Vec::new(),
+            alpha: 255,
+        }
+    }
+}
+
+impl Segments {
+    pub fn translucent() -> Self {
+        Self {
+            alpha: 80,
+            ..Self::default()
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        ctx: &Context,
+        segments: &[LineSegment],
+        transformation: Mat3,
+        centre: Vec3,
+        magnification: f32,
+    ) -> anyhow::Result<()> {
+        self.objects
+            .retain(|object| segments.iter().any(|segment| segment.id == object.id));
+
+        for segment in segments {
+            let index = self
+                .objects
+                .iter()
+                .position(|object| object.id == segment.id)
+                .unwrap_or_else(|| {
+                    self.objects.push(RenderedSegment {
+                        id: segment.id,
+                        object: None,
+                    });
+
+                    self.objects.len() - 1
+                });
+
+            let rendered = &mut self.objects[index];
+
+            if segment.hidden {
+                rendered.object = None;
+
+                continue;
+            }
+
+            let start =
+                utils::world_position(segment.endpoints.0, transformation, centre, magnification);
+            let end =
+                utils::world_position(segment.endpoints.1, transformation, centre, magnification);
+            let mut positions = Vec::new();
+            let mut indices = Vec::new();
+
+            if let Some((start, end)) = utils::clip_edge(start, end) {
+                utils::append_edge(&mut positions, &mut indices, start, end)?;
+            }
+
+            let mut color = segment.color();
+            color.a = self.alpha;
+
+            utils::update_mesh(ctx, &mut rendered.object, positions, indices, color);
+        }
+
+        Ok(())
+    }
+
+    pub fn objects(&self) -> impl Iterator<Item = &Gm<Mesh, ColorMaterial>> {
+        self.objects
+            .iter()
+            .flat_map(|segment| segment.object.iter())
+    }
+}
+
 struct RenderedPoint {
     id: usize,
     object: Gm<Mesh, ColorMaterial>,
