@@ -587,7 +587,15 @@ impl Ui {
                 entries.iter().flatten().all(|value| value.is_finite())
             });
 
-            if let Some(matrix) = inverse {
+            if let Some(mut matrix) = inverse {
+                let entries: &mut [[_; 3]; 3] = matrix.as_mut();
+
+                for value in entries.iter_mut().flatten() {
+                    if *value == 0.0 {
+                        *value = 0.0;
+                    }
+                }
+
                 let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
 
                 self.matrices.push(MatrixInput {
