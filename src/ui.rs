@@ -438,7 +438,7 @@ impl Ui {
         ui.heading("Mobile controls");
 
         ui.horizontal(|ui| {
-            if ui.button("Recentre").clicked() {
+            if ui.button("Home").clicked() {
                 self.view_action = Some(ViewAction::ResetCentre);
             }
 
