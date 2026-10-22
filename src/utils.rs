@@ -188,8 +188,6 @@ pub fn append_edge(
     start: Vec3,
     end: Vec3,
 ) -> Result<()> {
-    use three_d::InnerSpace as _;
-
     let direction = end - start;
 
     if direction.magnitude2() < 1.0e-12 {

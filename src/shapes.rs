@@ -1,18 +1,6 @@
 //! For shapes.
 
-use three_d::{
-    ColorMaterial,
-    Context,
-    CpuMaterial,
-    CpuMesh,
-    Gm,
-    Mat3,
-    Mat4,
-    Mesh,
-    Srgba,
-    Vec3,
-    Zero,
-};
+use three_d::{ColorMaterial, Context, CpuMaterial, CpuMesh, Gm, Mesh, prelude::*};
 
 use crate::{grid, palette, utils};
 

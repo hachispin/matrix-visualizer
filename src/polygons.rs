@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::Result;
-use three_d::{ColorMaterial, Context, Gm, Mat3, Mesh, Srgba, Vec3, Vector3, Zero};
+use three_d::{ColorMaterial, Context, Gm, Mesh, prelude::*};
 
 use crate::{grid, palette, utils};
 
