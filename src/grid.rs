@@ -6,7 +6,7 @@ use three_d::{Context, CpuMesh, Indices, Mesh, Positions, prelude::*};
 use crate::{palette, utils};
 
 /// The cubic grid extends out `GRID_SIZE` world units from its origin in all six directions.
-pub(crate) const GRID_SIZE: f32 = 5.0;
+pub const GRID_SIZE: f32 = 5.0;
 
 /// Width of grid lines.
 const LINE_WIDTH: f32 = 0.05;
@@ -35,7 +35,7 @@ fn draw_axis_arrow() -> Result<CpuMesh> {
 
 /// Largest 1–2–5 graph interval that fits within one world unit at this zoom.
 /// This keeps gridline spacing between 0.4 and 1 world units.
-pub(crate) fn interval(magnification: f32) -> f32 {
+pub fn interval(magnification: f32) -> f32 {
     let target = f64::from(magnification).recip();
     let decade = 10.0_f64.powf(target.log10().floor());
     let fraction = target / decade;
@@ -52,7 +52,7 @@ pub(crate) fn interval(magnification: f32) -> f32 {
 }
 
 /// Whether the zoom and the graph coordinates throughout the visible grid remain finite.
-pub(crate) fn view_is_finite(centre: Vec3, magnification: f32) -> bool {
+pub fn view_is_finite(centre: Vec3, magnification: f32) -> bool {
     if !magnification.is_finite() || magnification <= 0.0 {
         return false;
     }

@@ -39,7 +39,7 @@ enum MatrixPreset {
 }
 
 impl MatrixPreset {
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Identity => "Identity",
             Self::Scale(_) => "Scale",
@@ -376,7 +376,7 @@ impl Ui {
             }
 
             // smoothstep! https://en.wikipedia.org/wiki/Smoothstep
-            let eased = progress * progress * (3.0 - 2.0 * progress);
+            let eased = progress * progress * 2.0f64.mul_add(-progress, 3.0);
 
             for column in 0..3 {
                 for row in 0..3 {
@@ -384,7 +384,7 @@ impl Ui {
                     let from = f64::from(animation.from[column][row]);
                     let to = f64::from(animation.to[column][row]);
 
-                    self.transformation[column][row] = (from + (to - from) * eased) as f32;
+                    self.transformation[column][row] = f64::mul_add(to - from, eased, from) as f32;
                 }
             }
 
@@ -800,7 +800,7 @@ impl Ui {
 
             matrix.preset_selector(ui);
 
-            let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+            let width = 2.0f32.mul_add(-ui.spacing().item_spacing.x, ui.available_width()) / 3.0;
             let mut entries = matrix.matrix();
             let mut edited = false;
 
@@ -851,7 +851,7 @@ impl Ui {
 }
 
 fn coordinate_editor(ui: &mut egui::Ui, position: &mut Vec3, transformation: Mat3) {
-    let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+    let width = 2.0f32.mul_add(-ui.spacing().item_spacing.x, ui.available_width()) / 3.0;
 
     ui.horizontal(|ui| {
         for (axis, coordinate) in [
@@ -1055,7 +1055,7 @@ fn number_display(
     let text_style = ui.style().drag_value_text_style.clone();
     let font = text_style.resolve(ui.style());
     let color = ui.visuals().text_color();
-    let width = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
+    let width = 2.0f32.mul_add(-ui.spacing().button_padding.x, ui.available_width());
 
     // truncate the displayed label and not the value itself
     let mut label = value.to_string();

@@ -101,7 +101,7 @@ pub fn world_to_graph(point: Vec3, centre: Vec3, magnification: f32) -> Vec3 {
     point / magnification + centre
 }
 
-pub(crate) fn update_mesh(
+pub fn update_mesh(
     ctx: &Context,
     object: &mut Option<Gm<Mesh, ColorMaterial>>,
     positions: Vec<Vec3>,
@@ -137,7 +137,7 @@ pub(crate) fn update_mesh(
 }
 
 /// Widen before mapping and clipping, including for vertices far outside the visible grid.
-pub(crate) fn world_position(
+pub fn world_position(
     position: Vec3,
     transformation: Mat3,
     centre: Vec3,
@@ -152,11 +152,11 @@ pub(crate) fn world_position(
     }))
 }
 
-pub(crate) fn clip_edge(mut start: Vector3<f64>, mut end: Vector3<f64>) -> Option<(Vec3, Vec3)> {
+pub fn clip_edge(mut start: Vector3<f64>, mut end: Vector3<f64>) -> Option<(Vec3, Vec3)> {
     for axis in 0..3 {
         for sign in [-1.0, 1.0] {
-            let start_distance = f64::from(grid::GRID_SIZE) - sign * start[axis];
-            let end_distance = f64::from(grid::GRID_SIZE) - sign * end[axis];
+            let start_distance = f64::mul_add(sign, -start[axis], f64::from(grid::GRID_SIZE));
+            let end_distance = f64::mul_add(sign, -end[axis], f64::from(grid::GRID_SIZE));
 
             if start_distance < 0.0 && end_distance < 0.0 {
                 return None;
@@ -182,7 +182,7 @@ pub(crate) fn clip_edge(mut start: Vector3<f64>, mut end: Vector3<f64>) -> Optio
     ))
 }
 
-pub(crate) fn append_edge(
+pub fn append_edge(
     positions: &mut Vec<Vec3>,
     indices: &mut Vec<u32>,
     start: Vec3,

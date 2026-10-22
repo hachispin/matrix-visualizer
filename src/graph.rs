@@ -109,6 +109,7 @@ impl Graph {
         let view_changed = zoom_changed || centre != self.state.centre;
         let matrix_changed = ui.transformation != self.state.transformation;
         let animation_endpoints = ui.animation_endpoints();
+        let endpoint_matrices = animation_endpoints.map(<[Mat3; 2]>::from);
         let endpoints_changed = animation_endpoints != self.state.animation_endpoints;
         let points_changed = ui.points != self.state.points;
         let segments_changed = ui.segments != self.state.segments;
@@ -143,9 +144,9 @@ impl Graph {
         }
 
         if (points_changed || view_changed || endpoints_changed)
-            && let Some((start, end)) = animation_endpoints
+            && let Some(endpoints) = endpoint_matrices
         {
-            for (points, transformation) in self.animation_points.iter_mut().zip([start, end]) {
+            for (points, transformation) in self.animation_points.iter_mut().zip(endpoints) {
                 points.update(ctx, &ui.points, transformation, centre, magnification);
             }
         }
@@ -156,9 +157,9 @@ impl Graph {
         }
 
         if (segments_changed || view_changed || endpoints_changed)
-            && let Some((start, end)) = animation_endpoints
+            && let Some(endpoints) = endpoint_matrices
         {
-            for (segments, transformation) in self.animation_segments.iter_mut().zip([start, end]) {
+            for (segments, transformation) in self.animation_segments.iter_mut().zip(endpoints) {
                 segments.update(ctx, &ui.segments, transformation, centre, magnification)?;
             }
         }
@@ -169,9 +170,9 @@ impl Graph {
         }
 
         if (polygons_changed || view_changed || endpoints_changed)
-            && let Some((start, end)) = animation_endpoints
+            && let Some(endpoints) = endpoint_matrices
         {
-            for (polygons, transformation) in self.animation_polygons.iter_mut().zip([start, end]) {
+            for (polygons, transformation) in self.animation_polygons.iter_mut().zip(endpoints) {
                 polygons.update(ctx, &ui.polygons, transformation, centre, magnification)?;
             }
         }

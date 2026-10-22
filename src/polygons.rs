@@ -37,7 +37,9 @@ impl Default for Polygon {
 }
 
 impl Polygon {
-    pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
+    pub const fn color(&self) -> Srgba {
+        palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()]
+    }
 
     pub fn make_unit_cube(&mut self) {
         self.vertices = [
@@ -250,8 +252,8 @@ fn clip_triangle(triangle: [Vector3<f64>; 3]) -> Vec<Vector3<f64>> {
             let mut start = last;
 
             for end in input {
-                let start_distance = f64::from(grid::GRID_SIZE) - sign * start[axis];
-                let end_distance = f64::from(grid::GRID_SIZE) - sign * end[axis];
+                let start_distance = f64::mul_add(sign, -start[axis], f64::from(grid::GRID_SIZE));
+                let end_distance = f64::mul_add(sign, -end[axis], f64::from(grid::GRID_SIZE));
 
                 if (start_distance >= 0.0) != (end_distance >= 0.0) {
                     let amount = start_distance / (start_distance - end_distance);
@@ -316,7 +318,7 @@ fn triangulate(vertices: &[Vertex]) -> Vec<[usize; 3]> {
     let area: f64 = projected
         .iter()
         .zip(projected.iter().cycle().skip(1))
-        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+        .map(|(a, b)| f64::mul_add(b[0], -a[1], a[0] * b[1]))
         .sum();
 
     if area.abs() < 1.0e-12 {
@@ -375,5 +377,5 @@ fn triangulate(vertices: &[Vertex]) -> Vec<[usize; 3]> {
 }
 
 fn cross_2d(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
-    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    (b[1] - a[1]).mul_add(-(c[0] - a[0]), (b[0] - a[0]) * (c[1] - a[1]))
 }

@@ -35,7 +35,9 @@ impl Default for Point {
 }
 
 impl Point {
-    pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
+    pub const fn color(&self) -> Srgba {
+        palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()]
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,7 +58,9 @@ impl Default for LineSegment {
 }
 
 impl LineSegment {
-    pub fn color(&self) -> Srgba { palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()] }
+    pub const fn color(&self) -> Srgba {
+        palette::SHAPE_COLORS[self.id % palette::SHAPE_COLORS.len()]
+    }
 }
 
 struct RenderedSegment {
