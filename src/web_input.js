@@ -235,6 +235,10 @@ export function is_touch_pointer() {
     return touchPointer;
 }
 
+export function has_touch_pointer() {
+    return window.matchMedia("(any-pointer: coarse)").matches;
+}
+
 export function take_value(id) {
     const value = committed.get(id);
     committed.delete(id);

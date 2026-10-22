@@ -48,10 +48,24 @@ use three_d::{
     prelude::*,
 };
 
-use crate::graph::Graph;
+use crate::{graph::Graph, ui::ViewAction};
 
 // this prevents drift (from repeatedly multiplying and dividing by 1.1)
 fn zoom_magnification(steps: i32) -> f32 { 1.1_f64.powi(steps) as f32 }
+
+fn move_centre(centre: &mut Vec3, zoom_steps: i32, axis: usize, reverse: bool) {
+    let magnification = zoom_magnification(zoom_steps);
+    let step = f64::from(grid::interval(magnification));
+    let offset = if reverse { -step } else { step };
+    let mut candidate = *centre;
+    let coordinate = &mut candidate[axis];
+
+    *coordinate = (((f64::from(*coordinate) + offset) / step).round() * step) as f32;
+
+    if grid::view_is_finite(candidate, magnification) {
+        *centre = candidate;
+    }
+}
 
 fn input_handler(
     events: &mut [Event],
@@ -125,25 +139,14 @@ fn input_handler(
                 continue;
             }
 
-            let magnification = zoom_magnification(*zoom_steps);
-            let step = f64::from(grid::interval(magnification));
-            let offset = if modifiers.shift { -step } else { step };
-
-            let mut candidate = *centre;
-
-            let coordinate = match k {
-                Key::X => &mut candidate.x,
-                Key::Y => &mut candidate.y,
-                Key::Z => &mut candidate.z,
+            let axis = match k {
+                Key::X => 0,
+                Key::Y => 1,
+                Key::Z => 2,
                 _ => unreachable!(),
             };
 
-            *coordinate = (((f64::from(*coordinate) + offset) / step).round() * step) as f32;
-
-            if grid::view_is_finite(candidate, magnification) {
-                *centre = candidate;
-            }
-
+            move_centre(centre, *zoom_steps, axis, modifiers.shift);
             *handled = true;
         }
     }
@@ -198,6 +201,15 @@ pub fn main() -> Result<()> {
             gui.context().egui_wants_keyboard_input(),
             gui.context().egui_wants_pointer_input(),
         );
+
+        if let Some(action) = ui.take_view_action() {
+            match action {
+                ViewAction::ResetCentre => centre = Vec3::zero(),
+                ViewAction::MoveCentre { axis, reverse } => {
+                    move_centre(&mut centre, zoom_steps, axis, reverse);
+                },
+            }
+        }
 
         graph
             .update(&ctx, &camera, centre, zoom_magnification(zoom_steps), &ui)

@@ -6,6 +6,7 @@ extern "C" {
     pub fn begin_frame(width: f32, height: f32);
     pub fn end_frame();
     pub fn is_editing(id: &str) -> bool;
+    pub fn has_touch_pointer() -> bool;
     fn is_touch_pointer() -> bool;
     pub fn take_value(id: &str) -> Option<String>;
     pub fn register_number(id: &str, value: &str, label: &str, bounds: &[f32]);

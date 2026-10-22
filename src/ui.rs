@@ -163,6 +163,11 @@ struct FocusedMatrixEntry {
     last: bool,
 }
 
+pub enum ViewAction {
+    ResetCentre,
+    MoveCentre { axis: usize, reverse: bool },
+}
+
 pub struct Ui {
     pub points: Vec<Point>,
     pub segments: Vec<LineSegment>,
@@ -172,6 +177,9 @@ pub struct Ui {
     matrices: Vec<MatrixInput>,
     focused_matrix_entry: Option<FocusedMatrixEntry>,
     sidebar_dragging: bool,
+    show_mobile_controls: bool,
+    mobile_shift: bool,
+    view_action: Option<ViewAction>,
     error: Option<String>,
 }
 
@@ -186,6 +194,9 @@ impl Default for Ui {
             matrices: Vec::new(),
             focused_matrix_entry: None,
             sidebar_dragging: false,
+            show_mobile_controls: false,
+            mobile_shift: false,
+            view_action: None,
             error: None,
         }
     }
@@ -209,8 +220,19 @@ impl Ui {
 
         context.set_fonts(fonts);
 
-        Self::default()
+        #[cfg(target_arch = "wasm32")]
+        let show_mobile_controls = crate::web_input::has_touch_pointer();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let show_mobile_controls = false;
+
+        Self {
+            show_mobile_controls,
+            ..Self::default()
+        }
     }
+
+    pub fn take_view_action(&mut self) -> Option<ViewAction> { self.view_action.take() }
 
     pub fn update(&mut self, gui: &mut GUI, frame: &mut FrameInput) -> Viewport {
         self.advance_animation(frame.accumulated_time * 0.001);
@@ -412,6 +434,41 @@ impl Ui {
         }
     }
 
+    fn mobile_controls(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Mobile controls");
+
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .add_sized([80.0, 40.0], egui::Button::new("Recenter"))
+                .clicked()
+            {
+                self.view_action = Some(ViewAction::ResetCentre);
+            }
+
+            for (axis, label) in ["x", "y", "z"].into_iter().enumerate() {
+                if ui
+                    .add_sized([40.0, 40.0], egui::Button::new(label))
+                    .clicked()
+                {
+                    self.view_action = Some(ViewAction::MoveCentre {
+                        axis,
+                        reverse: self.mobile_shift,
+                    });
+                }
+            }
+
+            if ui
+                .add_sized(
+                    [64.0, 40.0],
+                    egui::Button::selectable(self.mobile_shift, "Reverse"),
+                )
+                .clicked()
+            {
+                self.mobile_shift = !self.mobile_shift;
+            }
+        });
+    }
+
     fn point_controls(&mut self, ui: &mut egui::Ui, target: Mat3) {
         ui.horizontal_wrapped(|ui| {
             ui.heading("Points");
@@ -548,6 +605,12 @@ impl Ui {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 let target = self.target_transformation();
+
+                if self.show_mobile_controls {
+                    self.mobile_controls(ui);
+                    ui.add_space(12.0);
+                    ui.separator();
+                }
 
                 self.point_controls(ui, target);
 

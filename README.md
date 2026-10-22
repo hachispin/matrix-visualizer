@@ -10,14 +10,12 @@ As of 20/10/2026, looks like this:
 
 ## Controls
 
-> [!NOTE]
-> Controls that modify the focus point don't have equivalents on mobile for now.
-
-- Scroll to change the magnification (zoom level) of the graph.
+- Scroll or pinch to change the magnification (zoom level) of the graph.
 - Drag with the left mouse button to change the graph's orientation.
-- For moving the focus point, type `x`, `y` or `z`. This moves the focus point by a grid
-  square in the specified positive axis. Press with SHIFT to go in the opposite direction.
-- Enter `~` to reset the focus point back to the origin, (0, 0, 0).
+- For moving the focus point, type or tap `x`, `y` or `z`. This
+  moves the focus point by a grid square in the specified positive
+  axis. Press with SHIFT or "Reverse" to go in the opposite direction.
+- Enter `~` or tap "Recenter" to reset the focus point back to the origin, (0, 0, 0).
 
 ---
 
