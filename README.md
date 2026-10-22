@@ -4,7 +4,22 @@ For visualizing matrices and transformations in both 2D and 3D.
 
 See the site on: <https://hachispin.github.io/matrix-visualizer/>
 
-As of 20/10/2026, looks like this: ![Screenshot of the program, showing the grid and sidebar](./showcase.png)
+As of 20/10/2026, looks like this:
+
+![Screenshot of theprogram, showing the grid and sidebar](./showcase.png)
+
+## Controls
+
+> [!NOTE]
+> Controls that modify the focus point don't have equivalents on mobile for now.
+
+- Scroll to change the magnification (zoom level) of the graph.
+- Drag with the left mouse button to change the graph's orientation.
+- For moving the focus point, type `x`, `y` or `z`. This moves the focus point by a grid
+  square in the specified positive axis. Press with SHIFT to go in the opposite direction.
+- Enter `~` to reset the focus point back to the origin, (0, 0, 0).
+
+---
 
 <details>
 <summary>Checklist</summary>
@@ -19,13 +34,13 @@ As of 20/10/2026, looks like this: ![Screenshot of the program, showing the grid
 - [x] Make input boxes
   - [x] How should matrices be entered?
   - [x] A “transform” button for matrices (that affects the grid)
-  - [ ] Different types of boxes (matrix, point, vector, polygon)
+  - [x] Different types of boxes (matrix, point, vector, polygon) <!-- No vectors though. -->
   - [ ] Consider accessibility?
 
 - [x] Draw points/vectors that the user enters
   - [x] User should be able to hide them
   - [x] Each drawn point/vector color-coded to its respective input box
-  - [ ] Enclosed area by a polygon should be shaded
+  - [x] Enclosed area by a polygon should be shaded
 
 - [x] Transforming
   - [ ] Toggle for whether the grid itself is affected by transformations
