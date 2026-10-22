@@ -1,6 +1,3 @@
-//! Native touch editing for canvas number fields. Focus starts in the browser's tap handler
-//! so mobile browsers can open their software keyboard without an asynchronous focus request.
-
 use three_d::{Event, MouseButton};
 use wasm_bindgen::prelude::*;
 
@@ -19,9 +16,8 @@ pub fn prepare_events(events: &mut Vec<Event>) {
         return;
     }
 
-    // three-d converts touches to mouse events without clearing the pointer on lift.
-    // Egui needs PointerGone after release, or the next contact's delta includes the
-    // distance from the old finger position and immediately scrolls the background.
+    // three-d does not clear pointer on lift (touch is converted to mouse events) so
+    // it causes some scrolling issues. to fix this, i just insert the event when needed
     for index in (0..events.len()).rev() {
         if matches!(
             events[index],

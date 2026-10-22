@@ -1,4 +1,4 @@
-//! Editable polygons, sequential outlines, and triangulated translucent interiors.
+//! For polygon rendering.
 
 use std::collections::BTreeSet;
 
@@ -246,9 +246,11 @@ fn clip_triangle(triangle: [Vector3<f64>; 3]) -> Vec<Vector3<f64>> {
     for axis in 0..3 {
         for sign in [-1.0, 1.0] {
             let input = std::mem::take(&mut vertices);
+
             let Some(&last) = input.last() else {
                 return vertices;
             };
+
             let mut start = last;
 
             for end in input {
@@ -258,6 +260,7 @@ fn clip_triangle(triangle: [Vector3<f64>; 3]) -> Vec<Vector3<f64>> {
                 if (start_distance >= 0.0) != (end_distance >= 0.0) {
                     let amount = start_distance / (start_distance - end_distance);
                     let mut intersection = start + (end - start) * amount;
+
                     intersection[axis] = sign * f64::from(grid::GRID_SIZE);
                     vertices.push(intersection);
                 }
@@ -274,17 +277,22 @@ fn clip_triangle(triangle: [Vector3<f64>; 3]) -> Vec<Vector3<f64>> {
     vertices
 }
 
-/// Ear clipping preserves the interior of concave polygons and either winding order.
+/// Algorithm for turning a polygon's vertices into triangles.
 fn triangulate(vertices: &[Vertex]) -> Vec<[usize; 3]> {
+    // Below this, values are treated as approximately zero.
+    const TOLERANCE: f64 = 1.0e-12;
+
     if vertices.len() < 3 {
         return Vec::new();
     }
 
     let origin = vertices[0].position.map(f64::from);
+
     let mut positions: Vec<_> = vertices
         .iter()
         .map(|vertex| vertex.position.map(f64::from) - origin)
         .collect();
+
     let scale = positions
         .iter()
         .flat_map(|position| [position.x.abs(), position.y.abs(), position.z.abs()])
@@ -301,12 +309,14 @@ fn triangulate(vertices: &[Vertex]) -> Vec<[usize; 3]> {
     let normal = positions
         .iter()
         .zip(positions.iter().cycle().skip(1))
-        .fold(Vector3::new(0.0, 0.0, 0.0), |normal, (start, end)| {
+        .fold(Vector3::zero(), |normal, (start, end)| {
             normal + start.cross(*end)
         });
+
     let drop_axis = (0..3)
         .max_by(|&a, &b| normal[a].abs().total_cmp(&normal[b].abs()))
         .unwrap_or(2);
+
     let projected: Vec<_> = positions
         .iter()
         .map(|position| match drop_axis {
@@ -315,65 +325,66 @@ fn triangulate(vertices: &[Vertex]) -> Vec<[usize; 3]> {
             _ => [position.x, position.y],
         })
         .collect();
+
     let area: f64 = projected
         .iter()
         .zip(projected.iter().cycle().skip(1))
         .map(|(a, b)| f64::mul_add(b[0], -a[1], a[0] * b[1]))
         .sum();
 
-    if area.abs() < 1.0e-12 {
+    if area.abs() < TOLERANCE {
         return Vec::new();
     }
 
     let winding = area.signum();
-    let mut remaining: Vec<_> = (0..vertices.len()).collect();
-    let mut triangles = Vec::new();
+    let mut rem: Vec<_> = (0..vertices.len()).collect();
+    let mut tris = Vec::new();
 
-    'triangulate: while remaining.len() > 3 {
-        for index in 0..remaining.len() {
-            let previous = remaining[(index + remaining.len() - 1) % remaining.len()];
-            let current = remaining[index];
-            let next = remaining[(index + 1) % remaining.len()];
-            let a = projected[previous];
-            let b = projected[current];
+    'outer: while rem.len() > 3 {
+        for i in 0..rem.len() {
+            let prev = rem[(i + rem.len() - 1) % rem.len()];
+            let curr = rem[i];
+            let next = rem[(i + 1) % rem.len()];
+            let a = projected[prev];
+            let b = projected[curr];
             let c = projected[next];
             let turn = cross_2d(a, b, c) * winding;
 
-            if turn.abs() <= 1.0e-12 {
-                remaining.remove(index);
+            if turn.abs() <= TOLERANCE {
+                rem.remove(i);
 
-                continue 'triangulate;
+                continue 'outer;
             }
 
             if turn < 0.0 {
                 continue;
             }
 
-            let contains_vertex = remaining.iter().any(|&vertex| {
-                vertex != previous
-                    && vertex != current
+            let contains_vertex = rem.iter().any(|&vertex| {
+                vertex != prev
+                    && vertex != curr
                     && vertex != next
-                    && cross_2d(a, b, projected[vertex]) * winding >= -1.0e-12
-                    && cross_2d(b, c, projected[vertex]) * winding >= -1.0e-12
-                    && cross_2d(c, a, projected[vertex]) * winding >= -1.0e-12
+                    && cross_2d(a, b, projected[vertex]) * winding >= -TOLERANCE
+                    && cross_2d(b, c, projected[vertex]) * winding >= -TOLERANCE
+                    && cross_2d(c, a, projected[vertex]) * winding >= -TOLERANCE
             });
 
             if !contains_vertex {
-                triangles.push([previous, current, next]);
-                remaining.remove(index);
+                tris.push([prev, curr, next]);
+                rem.remove(i);
 
-                continue 'triangulate;
+                continue 'outer;
             }
         }
 
         return Vec::new();
     }
 
-    if remaining.len() == 3 {
-        triangles.push([remaining[0], remaining[1], remaining[2]]);
+    if rem.len() == 3 {
+        tris.push([rem[0], rem[1], rem[2]]);
     }
 
-    triangles
+    tris
 }
 
 fn cross_2d(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
