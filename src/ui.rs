@@ -437,17 +437,18 @@ impl Ui {
     fn mobile_controls(&mut self, ui: &mut egui::Ui) {
         ui.heading("Mobile controls");
 
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .add_sized([80.0, 40.0], egui::Button::new("Recenter"))
-                .clicked()
-            {
+        ui.horizontal(|ui| {
+            if ui.button("Recentre").clicked() {
                 self.view_action = Some(ViewAction::ResetCentre);
             }
 
+            ui.checkbox(&mut self.mobile_shift, "Reversed");
+        });
+
+        ui.horizontal(|ui| {
             for (axis, label) in ["x", "y", "z"].into_iter().enumerate() {
                 if ui
-                    .add_sized([40.0, 40.0], egui::Button::new(label))
+                    .add_sized([32.0, 26.0], egui::Button::new(label))
                     .clicked()
                 {
                     self.view_action = Some(ViewAction::MoveCentre {
@@ -455,16 +456,6 @@ impl Ui {
                         reverse: self.mobile_shift,
                     });
                 }
-            }
-
-            if ui
-                .add_sized(
-                    [64.0, 40.0],
-                    egui::Button::selectable(self.mobile_shift, "Reverse"),
-                )
-                .clicked()
-            {
-                self.mobile_shift = !self.mobile_shift;
             }
         });
     }
