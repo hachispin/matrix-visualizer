@@ -1,5 +1,5 @@
-// Egui's canvas widgets cannot summon a mobile keyboard. Use a real input for a
-// tapped number, leaving mouse and hardware-keyboard editing in egui.
+// For mobile keyboards, since egui doesn't do this.
+
 let canvas;
 let input;
 let fields = new Map();
@@ -31,9 +31,15 @@ function position(field) {
     const visibleTop = viewport?.offsetTop ?? 0;
     const visibleBottom = visibleTop + (viewport?.height ?? window.innerHeight);
     const fieldTop = canvasRect.top + y * scaleY;
-    const editorTop = Math.max(visibleTop, Math.min(fieldTop, visibleBottom - height * scaleY));
+
+    const editorTop = Math.max(
+        visibleTop,
+        Math.min(fieldTop, visibleBottom - height * scaleY),
+    );
+
     const clipTop = editorTop === fieldTop ? Math.max(0, top - y) * scaleY : 0;
-    const clipBottom = editorTop === fieldTop ? Math.max(0, y + height - bottom) * scaleY : 0;
+    const clipBottom =
+        editorTop === fieldTop ? Math.max(0, y + height - bottom) * scaleY : 0;
 
     Object.assign(input.style, {
         left: `${canvasRect.left + x * scaleX}px`,
@@ -48,17 +54,19 @@ function field_at(event) {
     const x = (event.clientX - canvasRect.left) / scaleX;
     const y = (event.clientY - canvasRect.top) / scaleY;
 
-    return [...fields.values()].find(({ bounds: [fx, fy, width, height, left, top, right, bottom] }) =>
-        x >= Math.max(fx, left) && x <= Math.min(fx + width, right)
-        && y >= Math.max(fy, top) && y <= Math.min(fy + height, bottom));
+    return [...fields.values()].find(
+        ({ bounds: [fx, fy, width, height, left, top, right, bottom] }) =>
+            x >= Math.max(fx, left) &&
+            x <= Math.min(fx + width, right) &&
+            y >= Math.max(fy, top) &&
+            y <= Math.min(fy + height, bottom),
+    );
 }
 
 function initialize() {
     canvas = document.getElementById("canvas");
     input = document.createElement("input");
     input.type = "text";
-    // Text mode retains minus signs and exponents on keyboards whose decimal
-    // layout only offers digits and a decimal separator.
     input.inputMode = "text";
     input.enterKeyHint = "done";
     input.autocomplete = "off";
@@ -78,7 +86,7 @@ function initialize() {
         outline: "none",
         background: "#fff",
         color: "#222",
-        // At least 16px prevents Safari from zooming the page when focusing.
+        // >=16px prevents Safari from zooming on focus
         font: "16px sans-serif",
         touchAction: "auto",
     });
@@ -86,18 +94,24 @@ function initialize() {
     document.body.append(input);
     input.addEventListener("blur", () => finish());
     input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === "Escape" || event.key === "Tab") {
+        if (
+            event.key === "Enter" ||
+            event.key === "Escape" ||
+            event.key === "Tab"
+        ) {
             event.preventDefault();
             finish(event.key === "Escape");
         }
     });
 
     input.addEventListener("input", () => {
-        const normalized = input.value.replace(/\s/g, "").replaceAll("−", "-");
+        const normalized = input.value.trim();
         const number = Number(normalized);
 
-        if (/^[+-]?(inf(inity)?|nan)$/i.test(normalized)
-            || (!Number.isNaN(number) && !Number.isFinite(Math.fround(number)))) {
+        if (
+            /^[+-]?(inf(inity)?|nan)$/i.test(normalized) ||
+            (!Number.isNaN(number) && !Number.isFinite(Math.fround(number)))
+        ) {
             input.value = active.value;
         }
     });
@@ -108,44 +122,76 @@ function initialize() {
         }
     });
 
-    canvas.addEventListener("pointerdown", (event) => {
-        touchPointer = event.pointerType === "touch";
-        finish();
+    canvas.addEventListener(
+        "pointerdown",
+        (event) => {
+            touchPointer = event.pointerType === "touch";
+            finish();
 
-        if (event.pointerType !== "touch" || !event.isPrimary) {
+            if (event.pointerType !== "touch" || !event.isPrimary) {
+                gesture = undefined;
+
+                return;
+            }
+
+            gesture = {
+                id: event.pointerId,
+                x: event.clientX,
+                y: event.clientY,
+                field: field_at(event),
+            };
+        },
+        true,
+    );
+
+    canvas.addEventListener(
+        "pointermove",
+        (event) => {
+            if (
+                gesture &&
+                (gesture.id !== event.pointerId ||
+                    Math.hypot(
+                        event.clientX - gesture.x,
+                        event.clientY - gesture.y,
+                    ) > 8)
+            ) {
+                gesture = undefined;
+            }
+        },
+        true,
+    );
+
+    canvas.addEventListener(
+        "pointercancel",
+        () => {
+            gesture = undefined;
+        },
+        true,
+    );
+    canvas.addEventListener(
+        "pointerup",
+        (event) => {
+            const tap = gesture;
             gesture = undefined;
 
-            return;
-        }
+            if (
+                !tap?.field ||
+                tap.id !== event.pointerId ||
+                field_at(event)?.id !== tap.field.id
+            ) {
+                return;
+            }
 
-        gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, field: field_at(event) };
-    }, true);
-
-    canvas.addEventListener("pointermove", (event) => {
-        if (gesture && (gesture.id !== event.pointerId
-            || Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 8)) {
-            gesture = undefined;
-        }
-    }, true);
-
-    canvas.addEventListener("pointercancel", () => { gesture = undefined; }, true);
-    canvas.addEventListener("pointerup", (event) => {
-        const tap = gesture;
-        gesture = undefined;
-
-        if (!tap?.field || tap.id !== event.pointerId || field_at(event)?.id !== tap.field.id) {
-            return;
-        }
-
-        active = { ...tap.field, seen: true };
-        input.value = active.value;
-        input.setAttribute("aria-label", active.label || "Number");
-        position(active);
-        input.hidden = false;
-        // This must happen synchronously during the tap, especially on iOS.
-        input.focus({ preventScroll: true });
-        input.select();
-    }, true);
+            active = { ...tap.field, seen: true };
+            input.value = active.value;
+            input.setAttribute("aria-label", active.label || "Number");
+            position(active);
+            input.hidden = false;
+            input.focus({ preventScroll: true });
+            input.select();
+        },
+        true,
+    );
 }
 
 export function begin_frame(width, height) {
@@ -174,8 +220,6 @@ export function register_number(id, value, label, bounds) {
 }
 
 export function end_frame() {
-    // Removed widgets must not leave an edit waiting for a future widget that
-    // happens to reuse their egui id.
     committed.clear();
 
     if (active && !active.seen) {

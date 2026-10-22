@@ -1,20 +1,17 @@
 //! Sidebar editors for points and 3×3 linear transformations.
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, mem};
 
 use three_d::{
     Event,
     FrameInput,
     GUI,
     Key,
-    Mat3,
     MouseButton,
     PhysicalPoint,
-    SquareMatrix,
-    Vec3,
     Viewport,
-    degrees,
     egui,
+    prelude::*,
 };
 
 use crate::{
@@ -30,81 +27,74 @@ struct TransformationAnimation {
     started_at: f64,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Default)]
 enum MatrixPreset {
+    #[default]
     Identity,
-    Scale,
-    RotateX,
-    RotateY,
-    RotateZ,
-    Custom,
+    Scale(f32),
+    RotateX(Deg<f32>),
+    RotateY(Deg<f32>),
+    RotateZ(Deg<f32>),
+    Custom(Mat3),
 }
 
 impl MatrixPreset {
     fn label(self) -> &'static str {
         match self {
             Self::Identity => "Identity",
-            Self::Scale => "Scale",
-            Self::RotateX => "Rotate about X",
-            Self::RotateY => "Rotate about Y",
-            Self::RotateZ => "Rotate about Z",
-            Self::Custom => "Custom",
+            Self::Scale(_) => "Scale",
+            Self::RotateX(_) => "Rotate about X",
+            Self::RotateY(_) => "Rotate about Y",
+            Self::RotateZ(_) => "Rotate about Z",
+            Self::Custom(_) => "Custom",
         }
     }
 }
 
+#[derive(Default)]
 struct MatrixInput {
     id: usize,
-    matrix: Mat3,
     preset: MatrixPreset,
-    scale: f32,
-    angle_degrees: f32,
-}
-
-impl Default for MatrixInput {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            matrix: Mat3::identity(),
-            preset: MatrixPreset::Identity,
-            scale: 1.0,
-            angle_degrees: 90.0,
-        }
-    }
 }
 
 impl MatrixInput {
-    fn rebuild_preset(&mut self) {
-        let angle = self.angle_degrees.rem_euclid(360.0);
+    fn matrix(&self) -> Mat3 {
+        use MatrixPreset::*;
 
-        self.matrix = match self.preset {
-            MatrixPreset::Identity => Mat3::identity(),
-            MatrixPreset::Scale => {
-                Mat3::from_diagonal(Vec3::new(self.scale, self.scale, self.scale))
-            },
-            MatrixPreset::RotateX => Mat3::from_angle_x(degrees(angle)),
-            MatrixPreset::RotateY => Mat3::from_angle_y(degrees(angle)),
-            MatrixPreset::RotateZ => Mat3::from_angle_z(degrees(angle)),
-            MatrixPreset::Custom => return,
+        let angle = match self.preset {
+            RotateX(angle) | RotateY(angle) | RotateZ(angle) => angle.normalize(),
+            _ => degrees(0.0),
         };
 
-        // Exact quarter turns have only zeroes and unit entries.
-        if matches!(
-            self.preset,
-            MatrixPreset::RotateX | MatrixPreset::RotateY | MatrixPreset::RotateZ
-        ) && angle % 90.0 == 0.0
-        {
+        let mut matrix = match self.preset {
+            Identity => return Mat3::identity(),
+            // mat3::from_scale() is for 2D, don't use here
+            Scale(scale) => return Mat3::from_value(scale),
+            Custom(matrix) => return matrix,
+
+            RotateX(_) => Mat3::from_angle_x(angle),
+            RotateY(_) => Mat3::from_angle_y(angle),
+            RotateZ(_) => Mat3::from_angle_z(angle),
+        };
+
+        // round quarter turns as they should mathematically have
+        // 0/1 entries but floating points can cause slight error
+        if angle.0 % 90.0 == 0.0 {
             for column in 0..3 {
                 for row in 0..3 {
-                    let value = self.matrix[column][row].round();
-                    self.matrix[column][row] = if value == 0.0 { 0.0 } else { value };
+                    let value = matrix[column][row].round();
+
+                    // -0.0 -> +0.0
+                    matrix[column][row] = if value == 0.0 { 0.0 } else { value };
                 }
             }
         }
+
+        matrix
     }
 
     fn preset_selector(&mut self, ui: &mut egui::Ui) {
-        let previous = self.preset;
+        use MatrixPreset::*;
 
         ui.horizontal_wrapped(|ui| {
             ui.label("Presets");
@@ -113,49 +103,50 @@ impl MatrixInput {
                 .selected_text(self.preset.label())
                 .width(130.0)
                 .show_ui(ui, |ui| {
+                    // default values set to something "interesting" i guess
+                    let (scale, angle) = match self.preset {
+                        Scale(scale) => (scale, degrees(90.0)),
+                        RotateX(angle) | RotateY(angle) | RotateZ(angle) => (2.0, angle),
+                        _ => (2.0, degrees(90.0)),
+                    };
+
                     for preset in [
-                        MatrixPreset::Identity,
-                        MatrixPreset::Scale,
-                        MatrixPreset::RotateX,
-                        MatrixPreset::RotateY,
-                        MatrixPreset::RotateZ,
-                        MatrixPreset::Custom,
+                        Identity,
+                        Scale(scale),
+                        RotateX(angle),
+                        RotateY(angle),
+                        RotateZ(angle),
+                        Custom(self.matrix()), // same as identity when newly selected
                     ] {
-                        ui.selectable_value(&mut self.preset, preset, preset.label());
+                        // compare variant itself and not its value
+                        let checked = mem::discriminant(&self.preset) == mem::discriminant(&preset);
+
+                        // if clicked, set to preset
+                        if ui.selectable_label(checked, preset.label()).clicked() {
+                            self.preset = preset;
+                        }
                     }
                 });
         });
-
-        if self.preset != previous {
-            self.rebuild_preset();
-        }
     }
 
     fn preset_parameter(&mut self, ui: &mut egui::Ui) {
-        let parameter = match self.preset {
-            MatrixPreset::Scale => Some(("Scale factor", &mut self.scale)),
-            MatrixPreset::RotateX | MatrixPreset::RotateY | MatrixPreset::RotateZ => {
-                Some(("Degrees", &mut self.angle_degrees))
-            },
-            MatrixPreset::Identity | MatrixPreset::Custom => None,
+        use MatrixPreset::*;
+
+        let parameter = match &mut self.preset {
+            Scale(scale) => Some(("Scale factor", scale)),
+            RotateX(angle) | RotateY(angle) | RotateZ(angle) => Some(("Degrees", &mut angle.0)),
+            Identity | Custom(_) => None,
         };
 
+        // create an input field if chosen preset has field (like scale factor for scale)
         if let Some((label, value)) = parameter {
-            let changed = ui
-                .push_id("preset_parameter", |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(label);
-
-                        ui.add_sized([90.0, 24.0], number_input(value, ""))
-                            .changed()
-                    })
-                    .inner
-                })
-                .inner;
-
-            if changed {
-                self.rebuild_preset();
-            }
+            ui.push_id("preset_parameter", |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(label);
+                    ui.add_sized([90.0, 24.0], number_input(value, ""));
+                });
+            });
         }
     }
 }
@@ -287,12 +278,19 @@ impl Ui {
         graph_viewport
     }
 
-    fn capture_sidebar_input(&mut self, events: &mut [Event], viewport: Viewport) {
-        let inside_plot = |position: PhysicalPoint| {
-            position.x >= viewport.x as f32
-                && position.x < viewport.x as f32 + viewport.width as f32
-                && position.y >= viewport.y as f32
-                && position.y < viewport.y as f32 + viewport.height as f32
+    /// Prevents mouse interactions done on the sidebar (GUI) from affecting the graph.
+    ///
+    /// For example, if a user drags their mouse from the sidebar to the graph,
+    /// the graph won't receive that input and consequently won't be affected.
+    fn capture_sidebar_input(&mut self, events: &mut [Event], graph_viewport: Viewport) {
+        let inside_plot = |p: PhysicalPoint| {
+            let v = graph_viewport;
+
+            // (x, y) -> graph viewport bottom left corner
+            p.x >= v.x as f32
+                && p.x < v.x as f32 + v.width as f32
+                && p.y >= v.y as f32
+                && p.y < v.y as f32 + v.height as f32
         };
 
         for event in events {
@@ -346,6 +344,7 @@ impl Ui {
             .map(|animation| (animation.from, animation.to))
     }
 
+    /// Used when transformations are applied while an animation is playing.
     fn queue_transformation(&mut self, to: Mat3, time: f64) {
         let (from, started_at) = self
             .animations
@@ -363,6 +362,7 @@ impl Ui {
         }
     }
 
+    /// For animating transformations.
     fn advance_animation(&mut self, time: f64) {
         while let Some(animation) = self.animations.front() {
             let progress =
@@ -375,14 +375,15 @@ impl Ui {
                 continue;
             }
 
+            // smoothstep! https://en.wikipedia.org/wiki/Smoothstep
             let eased = progress * progress * (3.0 - 2.0 * progress);
 
             for column in 0..3 {
                 for row in 0..3 {
+                    // result of `to - from` may not fit in an f32
                     let from = f64::from(animation.from[column][row]);
                     let to = f64::from(animation.to[column][row]);
 
-                    // Widen before interpolation so opposite large values cannot overflow.
                     self.transformation[column][row] = (from + (to - from) * eased) as f32;
                 }
             }
@@ -532,6 +533,9 @@ impl Ui {
     }
 
     fn controls(&mut self, ui: &mut egui::Ui) {
+        use MatrixAction::*;
+        use MatrixPreset::*;
+
         self.focused_matrix_entry = None;
 
         ui.heading("Matrix Visualizer");
@@ -561,15 +565,16 @@ impl Ui {
 
                 self.matrices.retain_mut(|matrix| {
                     ui.push_id(("matrix", matrix.id), |ui| {
+                        // don't retain matrix if action is remove
                         match Self::matrix_editor(ui, matrix, &mut self.focused_matrix_entry) {
-                            Some(MatrixAction::Remove) => false,
-                            Some(MatrixAction::Apply) => {
-                                apply = Some(matrix.matrix);
+                            Some(Remove) => false,
+                            Some(Apply) => {
+                                apply = Some(matrix.matrix());
 
                                 true
                             },
-                            Some(MatrixAction::CreateInverse) => {
-                                create_inverse = Some(matrix.matrix);
+                            Some(CreateInverse) => {
+                                create_inverse = Some(matrix.matrix());
 
                                 true
                             },
@@ -588,6 +593,7 @@ impl Ui {
             });
 
             if let Some(mut matrix) = inverse {
+                let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
                 let entries: &mut [[_; 3]; 3] = matrix.as_mut();
 
                 for value in entries.iter_mut().flatten() {
@@ -596,14 +602,11 @@ impl Ui {
                     }
                 }
 
-                let id = available_id(self.matrices.iter().map(|matrix| matrix.id));
-
                 self.matrices.push(MatrixInput {
                     id,
-                    matrix,
-                    preset: MatrixPreset::Custom,
-                    ..MatrixInput::default()
+                    preset: Custom(matrix),
                 });
+
                 self.matrices.sort_by_key(|matrix| matrix.id);
                 self.error = None;
             } else {
@@ -623,7 +626,7 @@ impl Ui {
                         .chain(
                             self.segments
                                 .iter()
-                                .flat_map(|segment| [segment.endpoints.0, segment.endpoints.1]),
+                                .flat_map(|segment| <[Vec3; 2]>::from(segment.endpoints)),
                         )
                         .chain(self.polygons.iter().flat_map(|polygon| {
                             polygon.vertices.iter().map(|vertex| vertex.position)
@@ -762,16 +765,14 @@ impl Ui {
 
                 if ui.button("Add vertex").clicked() {
                     let id = available_id(polygon.vertices.iter().map(|vertex| vertex.id));
-                    let first = polygon.vertices[0].position;
-                    let last = polygon.vertices[polygon.vertices.len() - 1].position;
-                    let position = Vec3::from(std::array::from_fn::<_, 3, _>(|axis| {
-                        first[axis].midpoint(last[axis])
-                    }));
 
-                    polygon.vertices.push(Vertex { id, position });
+                    polygon.vertices.push(Vertex {
+                        id,
+                        position: Vec3::zero(),
+                    });
                 }
             } else {
-                ui.label("Eight corners joined by six shaded faces.");
+                ui.label("Eight vertices joined together, forming six shaded faces.");
             }
         });
 
@@ -790,7 +791,7 @@ impl Ui {
 
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.strong(format!("Matrix #{} (3×3)", matrix.id + 1));
+                ui.strong(format!("Matrix {}", matrix.id + 1));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     remove = ui.button("Remove").clicked();
@@ -800,15 +801,14 @@ impl Ui {
             matrix.preset_selector(ui);
 
             let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+            let mut entries = matrix.matrix();
             let mut edited = false;
 
             egui::Grid::new("entries").num_columns(3).show(ui, |ui| {
                 for row in 0..3 {
                     for column in 0..3 {
-                        let response = ui.add_sized(
-                            [width, 24.0],
-                            number_input(&mut matrix.matrix[column][row], ""),
-                        );
+                        let response = ui
+                            .add_sized([width, 24.0], number_input(&mut entries[column][row], ""));
                         edited |= response.changed();
 
                         if response.has_focus() {
@@ -824,7 +824,7 @@ impl Ui {
             });
 
             if edited {
-                matrix.preset = MatrixPreset::Custom;
+                matrix.preset = MatrixPreset::Custom(entries);
             }
 
             matrix.preset_parameter(ui);
@@ -913,7 +913,8 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
 
         #[cfg(target_arch = "wasm32")]
         let committed = crate::web_input::take_value(&web_id)
-            .and_then(|text| parse_number(&text))
+            .and_then(|text| text.trim().parse::<f32>().ok())
+            .filter(|value| value.is_finite())
             .is_some_and(|parsed| {
                 *value = parsed;
 
@@ -1022,22 +1023,17 @@ fn number_editor(
     let finished = !response.has_focus() || response.clicked_elsewhere();
     let cancelled = ui.input(|input| input.key_pressed(egui::Key::Escape));
 
-    if !cancelled && (response.changed() || finished) {
-        let normalized: String = text
-            .chars()
-            .filter(|character| !character.is_whitespace())
-            .map(|character| if character == '−' { '-' } else { character })
-            .collect();
-
-        if let Ok(parsed) = normalized.parse::<f32>() {
-            if parsed.is_finite() {
-                if finished {
-                    *value = parsed;
-                    response.mark_changed();
-                }
-            } else {
-                text = value.to_string();
+    if !cancelled
+        && (response.changed() || finished)
+        && let Ok(parsed) = text.trim().parse::<f32>()
+    {
+        if parsed.is_finite() {
+            if finished {
+                *value = parsed;
+                response.mark_changed();
             }
+        } else {
+            text = value.to_string();
         }
     }
 
@@ -1061,7 +1057,7 @@ fn number_display(
     let color = ui.visuals().text_color();
     let width = ui.available_width() - 2.0 * ui.spacing().button_padding.x;
 
-    // Only shorten the label, never the stored number or edit buffer.
+    // truncate the displayed label and not the value itself
     let mut label = value.to_string();
 
     let truncated = ui.fonts_mut(|fonts| {
@@ -1101,15 +1097,4 @@ fn number_display(
     }
 
     (response, truncated, value.to_string())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn parse_number(text: &str) -> Option<f32> {
-    text.chars()
-        .filter(|character| !character.is_whitespace())
-        .map(|character| if character == '−' { '-' } else { character })
-        .collect::<String>()
-        .parse::<f32>()
-        .ok()
-        .filter(|value| value.is_finite())
 }
