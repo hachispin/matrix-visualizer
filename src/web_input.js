@@ -25,6 +25,31 @@ function finish(cancelled = false) {
     input.blur();
 }
 
+function start_editing(field) {
+    active = { ...field, seen: true };
+    input.value = active.value;
+    input.setAttribute("aria-label", active.label || "Number");
+    position(active);
+    input.hidden = false;
+    input.focus({ preventScroll: true });
+    input.select();
+}
+
+function advance_field() {
+    if (active?.lastInSequence !== false) {
+        return;
+    }
+
+    const sequence = [...fields.values()];
+    const index = sequence.findIndex((field) => field.id === active.id);
+    const next = index >= 0 ? sequence[index + 1] : undefined;
+
+    if (next) {
+        committed.set(active.id, input.value);
+        start_editing(next);
+    }
+}
+
 function position(field) {
     const [x, y, width, height, left, top, right, bottom] = field.bounds;
     const viewport = window.visualViewport;
@@ -94,6 +119,13 @@ function initialize() {
     document.body.append(input);
     input.addEventListener("blur", () => finish());
     input.addEventListener("keydown", (event) => {
+        if (event.key === "," && typeof active?.lastInSequence === "boolean") {
+            event.preventDefault();
+            advance_field();
+
+            return;
+        }
+
         if (
             event.key === "Enter" ||
             event.key === "Escape" ||
@@ -104,7 +136,46 @@ function initialize() {
         }
     });
 
-    input.addEventListener("input", () => {
+    let valueBeforeComma;
+
+    input.addEventListener("beforeinput", (event) => {
+        valueBeforeComma = undefined;
+
+        if (
+            event.inputType === "insertText" &&
+            event.data === "," &&
+            typeof active?.lastInSequence === "boolean"
+        ) {
+            if (event.cancelable) {
+                event.preventDefault();
+                advance_field();
+            } else {
+                valueBeforeComma = input.value;
+            }
+        }
+    });
+
+    input.addEventListener("input", (event) => {
+        if (
+            event.inputType === "insertText" &&
+            event.data === "," &&
+            typeof active?.lastInSequence === "boolean"
+        ) {
+            if (valueBeforeComma !== undefined) {
+                input.value = valueBeforeComma;
+            } else {
+                const cursor = input.selectionStart ?? input.value.length;
+                input.setRangeText("", Math.max(0, cursor - 1), cursor, "end");
+            }
+
+            valueBeforeComma = undefined;
+            advance_field();
+
+            return;
+        }
+
+        valueBeforeComma = undefined;
+
         const normalized = input.value.trim();
         const number = Number(normalized);
 
@@ -182,13 +253,7 @@ function initialize() {
                 return;
             }
 
-            active = { ...tap.field, seen: true };
-            input.value = active.value;
-            input.setAttribute("aria-label", active.label || "Number");
-            position(active);
-            input.hidden = false;
-            input.focus({ preventScroll: true });
-            input.select();
+            start_editing(tap.field);
         },
         true,
     );
@@ -209,8 +274,15 @@ export function begin_frame(width, height) {
     }
 }
 
-export function register_number(id, value, label, bounds) {
-    const field = { id, value, label, bounds: Array.from(bounds) };
+export function register_number(id, value, label, bounds, lastInSequence) {
+    const field = {
+        id,
+        value,
+        label,
+        bounds: Array.from(bounds),
+        lastInSequence,
+    };
+
     fields.set(id, field);
 
     if (active?.id === id) {

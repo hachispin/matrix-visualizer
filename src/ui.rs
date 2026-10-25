@@ -144,7 +144,7 @@ impl MatrixInput {
             ui.push_id("preset_parameter", |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(label);
-                    ui.add_sized([90.0, 24.0], number_input(value, ""));
+                    ui.add_sized([90.0, 24.0], number_input(value, "", None));
                 });
             });
         }
@@ -155,12 +155,6 @@ enum MatrixAction {
     Remove,
     Apply,
     CreateInverse,
-}
-
-#[derive(Clone, Copy)]
-struct FocusedMatrixEntry {
-    id: egui::Id,
-    last: bool,
 }
 
 pub enum ViewAction {
@@ -175,7 +169,6 @@ pub struct Ui {
     pub transformation: Mat3,
     animations: VecDeque<TransformationAnimation>,
     matrices: Vec<MatrixInput>,
-    focused_matrix_entry: Option<FocusedMatrixEntry>,
     sidebar_dragging: bool,
     show_mobile_controls: bool,
     mobile_shift: bool,
@@ -192,7 +185,6 @@ impl Default for Ui {
             transformation: Mat3::identity(),
             animations: VecDeque::new(),
             matrices: Vec::new(),
-            focused_matrix_entry: None,
             sidebar_dragging: false,
             show_mobile_controls: false,
             mobile_shift: false,
@@ -238,15 +230,17 @@ impl Ui {
         self.advance_animation(frame.accumulated_time * 0.001);
 
         // go to the next entry if a comma is typed
-        if let Some(entry) = self.focused_matrix_entry
-            && gui.context().memory(egui::Memory::focused) == Some(entry.id)
+        if let Some(id) = gui.context().memory(egui::Memory::focused)
+            && let Some(last) = gui
+                .context()
+                .data(|data| data.get_temp::<bool>(id.with("comma_navigation")))
         {
             let mut push_tab = false;
 
             frame.events.retain_mut(|event| {
                 if matches!(event, Event::Text(text) if text == ",") {
                     // drop comma type event if on last
-                    if entry.last {
+                    if last {
                         return false;
                     }
 
@@ -584,8 +578,6 @@ impl Ui {
         use MatrixAction::*;
         use MatrixPreset::*;
 
-        self.focused_matrix_entry = None;
-
         ui.heading("Matrix Visualizer");
         ui.separator();
 
@@ -620,7 +612,7 @@ impl Ui {
                 self.matrices.retain_mut(|matrix| {
                     ui.push_id(("matrix", matrix.id), |ui| {
                         // don't retain matrix if action is remove
-                        match Self::matrix_editor(ui, matrix, &mut self.focused_matrix_entry) {
+                        match Self::matrix_editor(ui, matrix) {
                             Some(Remove) => false,
                             Some(Apply) => {
                                 apply = Some(matrix.matrix());
@@ -835,11 +827,7 @@ impl Ui {
         !remove
     }
 
-    fn matrix_editor(
-        ui: &mut egui::Ui,
-        matrix: &mut MatrixInput,
-        focused_entry: &mut Option<FocusedMatrixEntry>,
-    ) -> Option<MatrixAction> {
+    fn matrix_editor(ui: &mut egui::Ui, matrix: &mut MatrixInput) -> Option<MatrixAction> {
         let mut remove = false;
         let mut action = None;
 
@@ -861,16 +849,15 @@ impl Ui {
             egui::Grid::new("entries").num_columns(3).show(ui, |ui| {
                 for row in 0..3 {
                     for column in 0..3 {
-                        let response = ui
-                            .add_sized([width, 24.0], number_input(&mut entries[column][row], ""));
+                        let response = ui.add_sized(
+                            [width, 24.0],
+                            number_input(
+                                &mut entries[column][row],
+                                "",
+                                Some(row == 2 && column == 2),
+                            ),
+                        );
                         edited |= response.changed();
-
-                        if response.has_focus() {
-                            *focused_entry = Some(FocusedMatrixEntry {
-                                id: response.id,
-                                last: row == 2 && column == 2,
-                            });
-                        }
                     }
 
                     ui.end_row();
@@ -915,7 +902,7 @@ fn coordinate_editor(ui: &mut egui::Ui, position: &mut Vec3, transformation: Mat
         ] {
             ui.add_sized(
                 [width, 24.0],
-                number_input(coordinate, &format!("{axis}: ")),
+                number_input(coordinate, &format!("{axis}: "), Some(axis == "z")),
             );
         }
     });
@@ -931,7 +918,7 @@ fn coordinate_editor(ui: &mut egui::Ui, position: &mut Vec3, transformation: Mat
             ] {
                 ui.add_sized(
                     [width, 24.0],
-                    number_input(coordinate, &format!("{axis}: ")),
+                    number_input(coordinate, &format!("{axis}: "), None),
                 );
             }
         });
@@ -957,10 +944,24 @@ fn available_id(ids: impl Iterator<Item = usize>) -> usize {
     available
 }
 
-fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 'a {
+fn number_input<'a>(
+    value: &'a mut f32,
+    prefix: &'a str,
+    last_in_sequence: Option<bool>,
+) -> impl egui::Widget + 'a {
     move |ui: &mut egui::Ui| {
         let id = ui.next_auto_id();
         let edit_id = id.with("number_text");
+
+        ui.data_mut(|data| {
+            let navigation_id = id.with("comma_navigation");
+
+            if let Some(last) = last_in_sequence {
+                data.insert_temp(navigation_id, last);
+            } else {
+                data.remove_temp::<bool>(navigation_id);
+            }
+        });
 
         #[cfg(target_arch = "wasm32")]
         let web_id = id.value().to_string();
@@ -1005,7 +1006,9 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
             }
 
             if ui.is_enabled()
-                && (touch_editing || ui.is_rect_visible(response.rect))
+                && (last_in_sequence.is_some()
+                    || touch_editing
+                    || ui.is_rect_visible(response.rect))
                 && !egui::Popup::is_any_open(ui.ctx())
             {
                 let rect = response.rect;
@@ -1025,6 +1028,7 @@ fn number_input<'a>(value: &'a mut f32, prefix: &'a str) -> impl egui::Widget + 
                         clip.right(),
                         clip.bottom(),
                     ],
+                    last_in_sequence,
                 );
             }
 

@@ -9,7 +9,13 @@ extern "C" {
     pub fn has_touch_pointer() -> bool;
     fn is_touch_pointer() -> bool;
     pub fn take_value(id: &str) -> Option<String>;
-    pub fn register_number(id: &str, value: &str, label: &str, bounds: &[f32]);
+    pub fn register_number(
+        id: &str,
+        value: &str,
+        label: &str,
+        bounds: &[f32],
+        last_in_sequence: Option<bool>,
+    );
 }
 
 pub fn prepare_events(events: &mut Vec<Event>) {
