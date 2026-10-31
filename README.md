@@ -14,8 +14,8 @@ As of 20/10/2026, looks like this:
 - Drag with the left mouse button to change the graph's orientation.
 - For moving the focus point, type or tap `x`, `y` or `z`. This
   moves the focus point by a grid square in the specified positive
-  axis. Press with SHIFT or "Reverse" to go in the opposite direction.
-- Enter `~` or tap "Recenter" to reset the focus point back to the origin, (0, 0, 0).
+  axis. Press with SHIFT or "Reversed" to go in the opposite direction.
+- Enter `~` or tap "Home" to reset the focus point back to the origin, (0, 0, 0).
 
 Note: when entering coordinates or matrix entries, you can enter a comma (`,`)
 while typing to go to the next coordinate/entry. This works on mobile as well.

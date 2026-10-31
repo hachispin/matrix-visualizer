@@ -162,6 +162,10 @@ pub enum ViewAction {
     MoveCentre { axis: usize, reverse: bool },
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "these flags track independent UI interactions rather than a shared state"
+)]
 pub struct Ui {
     pub points: Vec<Point>,
     pub segments: Vec<LineSegment>,
@@ -170,6 +174,7 @@ pub struct Ui {
     animations: VecDeque<TransformationAnimation>,
     matrices: Vec<MatrixInput>,
     sidebar_dragging: bool,
+    show_help: bool,
     show_mobile_controls: bool,
     mobile_shift: bool,
     view_action: Option<ViewAction>,
@@ -186,6 +191,7 @@ impl Default for Ui {
             animations: VecDeque::new(),
             matrices: Vec::new(),
             sidebar_dragging: false,
+            show_help: false,
             show_mobile_controls: false,
             mobile_shift: false,
             view_action: None,
@@ -419,12 +425,79 @@ impl Ui {
         let sidebar_width =
             ((left - viewport.x as f32).max(0.0) as u32).min(viewport.width.saturating_sub(1));
 
+        if self.show_help {
+            self.help(ui.ctx());
+        }
+
         Viewport {
             x: viewport.x
                 + i32::try_from(sidebar_width).expect("Sidebar width exceeds window limits!"),
             width: (viewport.width - sidebar_width).max(1),
             height: viewport.height.max(1),
             ..viewport
+        }
+    }
+
+    fn help(&mut self, context: &egui::Context) {
+        let available = context.content_rect().size();
+        let response = egui::Modal::new(egui::Id::new("controls_help")).show(context, |ui| {
+            ui.set_width((available.x - 32.0).clamp(0.0, 320.0));
+            ui.horizontal(|ui| {
+                ui.heading("Controls");
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let size = egui::Vec2::splat(ui.spacing().interact_size.y);
+
+                    if ui
+                        .add_sized(size, egui::Button::new("×"))
+                        .on_hover_text("Close")
+                        .clicked()
+                    {
+                        ui.close();
+                    }
+                });
+            });
+
+            ui.separator();
+
+            egui::ScrollArea::vertical()
+                .max_height((available.y - 100.0).max(0.0))
+                .show(ui, |ui| {
+                    for (label, description) in [
+                        (
+                            "Zoom",
+                            "Scroll or pinch to change the graph's magnification.",
+                        ),
+                        (
+                            "Rotate",
+                            "Drag with the left mouse button, or drag with one finger on mobile, \
+                             to change the graph's orientation.",
+                        ),
+                        (
+                            "Move focus",
+                            "Press x, y or z, or tap its mobile button, to move the focus point \
+                             one grid square along that positive axis. Hold Shift or enable \
+                             Reversed to move in the opposite direction.",
+                        ),
+                        (
+                            "Recenter",
+                            "Type ~ or tap Home to reset the focus point to the origin, (0, 0, 0).",
+                        ),
+                        (
+                            "Next entry",
+                            "Type a comma (,) while entering coordinates or matrix entries to \
+                             move to the next coordinate or entry. This also works on mobile.",
+                        ),
+                    ] {
+                        ui.strong(label);
+                        ui.add(egui::Label::new(description).wrap());
+                        ui.add_space(8.0);
+                    }
+                });
+        });
+
+        if response.should_close() {
+            self.show_help = false;
         }
     }
 
@@ -578,7 +651,14 @@ impl Ui {
         use MatrixAction::*;
         use MatrixPreset::*;
 
-        ui.heading("Matrix Visualizer");
+        ui.horizontal_wrapped(|ui| {
+            ui.heading("Matrix Visualizer");
+
+            if ui.button("Help").clicked() {
+                self.show_help = true;
+            }
+        });
+
         ui.separator();
 
         let mut apply = None;
