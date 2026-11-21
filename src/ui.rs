@@ -543,10 +543,6 @@ impl Ui {
             }
         });
 
-        if self.points.is_empty() {
-            ui.label("Add a point and plot its coordinates.");
-        }
-
         self.points.retain_mut(|point| {
             ui.push_id(("point", point.id), |ui| {
                 Self::point_editor(ui, point, target)
@@ -569,10 +565,6 @@ impl Ui {
                 self.segments.sort_by_key(|segment| segment.id);
             }
         });
-
-        if self.segments.is_empty() {
-            ui.label("Add a line segment and edit its two endpoints.");
-        }
 
         self.segments.retain_mut(|segment| {
             ui.push_id(("segment", segment.id), |ui| {
@@ -605,10 +597,6 @@ impl Ui {
             }
         });
 
-        if self.polygons.is_empty() {
-            ui.label("Add a polygon to connect and shade its vertices.");
-        }
-
         self.polygons.retain_mut(|polygon| {
             ui.push_id(("polygon", polygon.id), |ui| {
                 Self::polygon_editor(ui, polygon, target)
@@ -631,10 +619,6 @@ impl Ui {
                 self.matrices.sort_by_key(|matrix| matrix.id);
             }
         });
-
-        if self.matrices.is_empty() {
-            ui.label("Add a matrix and apply it to transform your shapes.");
-        }
 
         if ui.button("Reset transformations").clicked() {
             self.animations.clear();
@@ -886,19 +870,13 @@ impl Ui {
                 polygon.vertices.remove(index);
             }
 
-            if sequential {
-                ui.label("Vertices connect in order, then back to the first.");
+            if sequential && ui.button("Add vertex").clicked() {
+                let id = available_id(polygon.vertices.iter().map(|vertex| vertex.id));
 
-                if ui.button("Add vertex").clicked() {
-                    let id = available_id(polygon.vertices.iter().map(|vertex| vertex.id));
-
-                    polygon.vertices.push(Vertex {
-                        id,
-                        position: Vec3::zero(),
-                    });
-                }
-            } else {
-                ui.label("Eight vertices joined together, forming six shaded faces.");
+                polygon.vertices.push(Vertex {
+                    id,
+                    position: Vec3::zero(),
+                });
             }
         });
 
